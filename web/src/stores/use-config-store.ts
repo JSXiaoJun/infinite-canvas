@@ -66,6 +66,24 @@ export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
 const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
+export const YYAPI_VIDEO_BASE_URL = "https://zl.yyapi.cloud";
+export const YYAPI_VIDEO_CHANNEL_ID = "yyapi-video";
+export const YYAPI_VIDEO_MODELS = [
+    "MiniMaxH3-2k",
+    "MiniMaxH3-2k-pro",
+    "MiniMaxH3-480p",
+    "MiniMaxH3-720p",
+    "fast-431-720p",
+    "fast-933-480p",
+    "fast-933-720p",
+    "gemini-omni-flash",
+    "manxue-431-720p",
+    "manxue-933-1080p",
+    "manxue-933-480p",
+    "manxue-933-720p",
+    "manxue2.5-301010-720p",
+    "veo31-fast",
+] as const;
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
@@ -86,6 +104,14 @@ export const defaultConfig: AiConfig = {
                 { name: "gpt-4o-mini-tts", capability: "audio" },
             ],
         },
+        {
+            id: YYAPI_VIDEO_CHANNEL_ID,
+            name: "YYAPI 视频",
+            baseUrl: YYAPI_VIDEO_BASE_URL,
+            apiKey: "",
+            apiFormat: "openai",
+            models: YYAPI_VIDEO_MODELS.map((name) => ({ name, capability: "video" as const })),
+        },
     ],
     model: "default::gpt-image-2",
     imageModel: "default::gpt-image-2",
@@ -102,7 +128,7 @@ export const defaultConfig: AiConfig = {
     videoWatermark: "false",
     systemPrompt: "",
     reasoningEffort: "auto",
-    models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
+    models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts", ...YYAPI_VIDEO_MODELS.map((name) => `${YYAPI_VIDEO_CHANNEL_ID}::${name}`)],
     quality: "auto",
     size: "1:1",
     background: "",
@@ -307,6 +333,10 @@ export function modelOptionName(value: string) {
     return decodeChannelModel(value)?.model || value;
 }
 
+export function isYyApiVideoModel(value: string) {
+    return (YYAPI_VIDEO_MODELS as readonly string[]).includes(modelOptionName(value));
+}
+
 export function modelOptionLabel(config: AiConfig, value: string) {
     const decoded = decodeChannelModel(value);
     if (!decoded) return value;
@@ -370,7 +400,21 @@ function normalizeChannels(config: AiConfig) {
             }),
         );
     }
-    return channels;
+    const yyapi = channels.find((channel) => channel.id === YYAPI_VIDEO_CHANNEL_ID) || channels.find((channel) => channel.models.some((model) => isYyApiVideoModel(model.name)));
+    const fixedChannel = createModelChannel({
+        id: YYAPI_VIDEO_CHANNEL_ID,
+        name: "YYAPI 视频",
+        baseUrl: YYAPI_VIDEO_BASE_URL,
+        apiKey: yyapi?.apiKey || "",
+        apiFormat: "openai",
+        models: YYAPI_VIDEO_MODELS.map((name) => ({ name, capability: "video" })),
+    });
+    return [
+        ...channels
+            .filter((channel) => channel.id !== YYAPI_VIDEO_CHANNEL_ID)
+            .map((channel) => ({ ...channel, models: channel.models.filter((model) => !isYyApiVideoModel(model.name)) })),
+        fixedChannel,
+    ];
 }
 
 export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {

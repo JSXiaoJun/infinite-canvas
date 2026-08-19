@@ -9,18 +9,21 @@ import { type AiConfig } from "@/stores/use-config-store";
 const resolutionOptions = [
     { value: "720", label: "720p" },
     { value: "480", label: "480p" },
+    { value: "1080", label: "1080p" },
+    { value: "2k", label: "2k" },
 ];
 
 const sizeOptions = [
     { value: "1280x720", labelKey: "landscape", width: 1280, height: 720 },
     { value: "720x1280", labelKey: "portrait", width: 720, height: 1280 },
+    { value: "1024x768", labelKey: "standardLandscape", width: 1024, height: 768 },
+    { value: "768x1024", labelKey: "standardPortrait", width: 768, height: 1024 },
     { value: "1024x1024", labelKey: "square", width: 1024, height: 1024 },
-    { value: "1792x1024", labelKey: "widescreen", width: 1792, height: 1024 },
-    { value: "1024x1792", labelKey: "tall", width: 1024, height: 1792 },
+    { value: "1792x768", labelKey: "widescreen", width: 1792, height: 768 },
     { value: "auto", labelKey: "auto", width: 0, height: 0 },
 ];
 
-const secondOptions = [6, 10, 12, 16, 20];
+const secondOptions = [4, 6, 8, 10, 15, 20, 30];
 
 export const videoResolutionOptions = resolutionOptions.map((item) => ({ value: item.value, label: item.label }));
 export const videoSizeOptions = sizeOptions.map((item) => ({ value: item.value, get label() { return i18n.t(`settingsPanels.video.sizes.${item.labelKey}`); } }));
@@ -93,7 +96,7 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                                 {value}s
                             </OptionPill>
                         ))}
-                        <NumberInput value={seconds} min={1} max={20} theme={theme} onChange={(value) => onConfigChange("videoSeconds", value)} />
+                        <NumberInput value={seconds} min={1} max={30} theme={theme} onChange={(value) => onConfigChange("videoSeconds", value)} />
                     </div>
                 </SettingGroup>
             </div>
@@ -102,7 +105,8 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
 }
 
 export function videoResolutionLabel(value: string) {
-    return `${normalizeVideoResolutionValue(value)}p`;
+    const resolution = normalizeVideoResolutionValue(value);
+    return /^\d+k$/i.test(resolution) ? resolution : `${resolution}p`;
 }
 
 export function videoSizeLabel(value: string) {
@@ -151,9 +155,9 @@ function SettingGroup({ title, color, children }: { title: string; color: string
 function ResolutionInput({ value, theme, onChange }: { value: string; theme: CanvasTheme; onChange: (value: string) => void }) {
     return (
         <label className="flex h-9 overflow-hidden rounded-full border text-sm" style={{ borderColor: theme.node.stroke, color: theme.node.text }}>
-            <input type="number" min={1} className="min-w-0 flex-1 bg-transparent px-3 text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" value={value} onChange={(event) => onChange(event.target.value)} onMouseDown={(event) => event.stopPropagation()} />
+            <input type="text" inputMode="numeric" className="min-w-0 flex-1 bg-transparent px-3 text-center outline-none" value={value} onChange={(event) => onChange(event.target.value)} onMouseDown={(event) => event.stopPropagation()} />
             <span className="grid w-7 place-items-center pr-1" style={{ color: theme.node.muted }}>
-                p
+                {/\d+k$/i.test(value) ? "" : "p"}
             </span>
         </label>
     );

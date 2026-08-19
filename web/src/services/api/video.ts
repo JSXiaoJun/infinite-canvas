@@ -3,24 +3,28 @@ import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
 import { dataUrlToFile } from "@/lib/image-utils";
-import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
-import { imageToDataUrl } from "@/services/image-storage";
-import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@/stores/use-config-store";
+import { getMediaBlob, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
+import { getImageBlob, imageToDataUrl } from "@/services/image-storage";
+import { boolConfig, buildApiUrl, isYyApiVideoModel, modelOptionName, resolveModelRequestConfig, resolveModelScript, YYAPI_VIDEO_BASE_URL, type AiConfig } from "@/stores/use-config-store";
+import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import { runModelPlugin } from "./model-plugin";
+import { uploadR2Asset } from "./r2-assets";
 import type { ReferenceImage } from "@/types/image";
 
-type VideoResponse = { id: string; status?: string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; content?: { video_url?: string; url?: string } | null };
+type VideoResponse = { id?: string; task_id?: string; status?: string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; content?: { video_url?: string; url?: string } | null };
 type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
 type ApiEnvelope<T> = T | { code?: number | string; data?: T | null; msg?: string; message?: string; error?: { message?: string } };
-type RequestOptions = { signal?: AbortSignal };
+type RequestOptions = { signal?: AbortSignal; referenceVideos?: ReferenceVideo[]; referenceAudios?: ReferenceAudio[] };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
-export type VideoGenerationTask = { id: string; provider: "openai" | "plugin"; model: string };
+export type VideoGenerationTask = { id: string; provider: "openai" | "yyapi" | "plugin"; model: string };
 export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
+export type VideoTaskPollingOptions = { intervalMs: number; maxAttempts: number };
 
 /** Results for scripted (plugin) video models, which run their own create+poll in one shot at task creation. */
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
+const publicAssetUrls = new Map<string, string>();
 
 function aiApiUrl(config: AiConfig, path: string) {
     return buildApiUrl(config.baseUrl, path);
@@ -35,24 +39,30 @@ function aiHeaders(config: AiConfig, contentType?: string) {
 
 export async function requestVideoGeneration(config: AiConfig, prompt: string, references: ReferenceImage[] = [], options?: RequestOptions): Promise<VideoGenerationResult> {
     const task = await createVideoGenerationTask(config, prompt, references, options);
-    for (let attempt = 0; attempt < 120; attempt += 1) {
+    const polling = videoTaskPollingOptions(task);
+    for (let attempt = 0; attempt < polling.maxAttempts; attempt += 1) {
         if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
         const state = await pollVideoGenerationTask(config, task, options);
         if (state.status === "completed") return state.result;
         if (state.status === "failed") throw new Error(state.error);
-        if (attempt === 119) throw new Error(apiText("videoTimeout", { provider: "" }));
-        await delay(2500, options?.signal);
+        if (attempt === polling.maxAttempts - 1) throw new Error(apiText("videoTimeout", { provider: "" }));
+        await delay(polling.intervalMs, options?.signal);
     }
     throw new Error(apiText("videoTimeout", { provider: "" }));
 }
 
 export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], options?: RequestOptions): Promise<VideoGenerationTask> {
     const selectedModel = (config.model || config.videoModel).trim();
-    const requestConfig = resolveModelRequestConfig(config, selectedModel);
-    const script = resolveModelScript(config, selectedModel);
+    const requestConfig = videoRequestConfig(config, selectedModel);
+    const script = isYyApiVideoModel(selectedModel) ? undefined : resolveModelScript(config, selectedModel);
     if (script) return createPluginVideoTask(requestConfig, selectedModel, script, prompt, references, options);
     assertVideoConfig(requestConfig, requestConfig.model);
+    if (isYyApiVideoConfig(requestConfig)) return createYyApiVideoTask(requestConfig, selectedModel, prompt, references, options);
     return createOpenAIVideoTask(requestConfig, selectedModel, prompt, references, options);
+}
+
+export function videoTaskPollingOptions(task: VideoGenerationTask): VideoTaskPollingOptions {
+    return task.provider === "yyapi" ? { intervalMs: 10_000, maxAttempts: 720 } : { intervalMs: 2500, maxAttempts: 120 };
 }
 
 export async function pollVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
@@ -60,7 +70,7 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
         const result = pluginVideoResults.get(task.id);
         return result ? { status: "completed", result } : { status: "failed", error: apiText("pluginVideoExpired") };
     }
-    const requestConfig = resolveModelRequestConfig(config, task.model);
+    const requestConfig = videoRequestConfig(config, task.model, task.provider === "yyapi");
     assertVideoConfig(requestConfig, requestConfig.model);
     return pollOpenAIVideoTask(requestConfig, task, options);
 }
@@ -135,12 +145,45 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
     }
 }
 
+async function createYyApiVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
+    const referenceLimit = yyApiReferenceLimit(model);
+    if (references.length > referenceLimit) throw new Error(apiText("yyapiReferenceLimit", { count: referenceLimit }));
+    const referenceVideos = options?.referenceVideos || [];
+    const referenceAudios = options?.referenceAudios || [];
+    validateYyApiMediaReferences(model, references.length, referenceVideos, referenceAudios);
+    const [imageUrls, videoUrls, audioUrls] = await Promise.all([
+        Promise.all(references.map((reference) => publicImageUrl(reference, options?.signal))),
+        Promise.all(referenceVideos.map((reference) => publicMediaUrl(reference, options?.signal))),
+        Promise.all(referenceAudios.map((reference) => publicMediaUrl(reference, options?.signal))),
+    ]);
+    const body = {
+        model: modelOptionName(model),
+        prompt,
+        duration: yyApiDuration(model, config.videoSeconds),
+        aspect_ratio: yyApiAspectRatio(model, config.size),
+        resolution: yyApiResolution(model, config.vquality),
+        generate_audio: boolConfig(config.videoGenerateAudio, true),
+        ...(imageUrls.length ? { image_urls: imageUrls } : {}),
+        ...(videoUrls[0] ? { reference_video: videoUrls[0] } : {}),
+        ...(audioUrls.length ? { audio_urls: audioUrls } : {}),
+    };
+    try {
+        const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(aiApiUrl(config, "/videos"), body, { headers: aiHeaders(config, "application/json"), signal: options?.signal })).data);
+        const taskId = created.task_id || created.id;
+        if (!taskId) throw new Error(apiText("noVideoTaskId"));
+        return { id: taskId, provider: "yyapi", model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("videoTaskCreateFailed")));
+    }
+}
+
 async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
     try {
         const video = unwrapVideoResponse((await axios.get<ApiVideoResponse>(aiApiUrl(config, `/videos/${task.id}`), { headers: aiHeaders(config), signal: options?.signal })).data);
         const url = videoResultUrl(video);
         if (url) return { status: "completed", result: await videoResultFromUrl(url, options) };
         if (video.status === "completed") {
+            if (task.provider === "yyapi") return { status: "completed", result: await videoResultFromUrl(`https://media.yyapi.cloud/public/videos/${encodeURIComponent(task.id)}/content`, options) };
             const content = await axios.get<Blob>(aiApiUrl(config, `/videos/${task.id}/content`), { headers: aiHeaders(config), responseType: "blob", signal: options?.signal });
             await assertVideoBlob(content.data);
             return { status: "completed", result: { blob: content.data } };
@@ -185,8 +228,121 @@ function normalizeVideoSize(value: string) {
 function normalizeVideoResolution(value: string) {
     if (value === "low") return "480p";
     if (value === "auto" || value === "high" || value === "medium") return "720p";
+    if (/^\d+k$/i.test(value)) return value.toLowerCase();
     const resolution = value.replace(/p$/i, "") || "720";
     return `${resolution}p`;
+}
+
+function isYyApiVideoConfig(config: AiConfig) {
+    try {
+        return new URL(config.baseUrl).hostname.toLowerCase() === new URL(YYAPI_VIDEO_BASE_URL).hostname;
+    } catch {
+        return config.baseUrl.trim().toLowerCase().startsWith(YYAPI_VIDEO_BASE_URL);
+    }
+}
+
+function videoRequestConfig(config: AiConfig, model: string, forceYyApi = false) {
+    const resolved = resolveModelRequestConfig(config, model);
+    return forceYyApi || isYyApiVideoModel(model) ? { ...resolved, baseUrl: YYAPI_VIDEO_BASE_URL, apiFormat: "openai" as const } : resolved;
+}
+
+async function publicImageUrl(reference: ReferenceImage, signal?: AbortSignal) {
+    const direct = [reference.url, reference.dataUrl].find(isPublicUrl);
+    if (direct) return direct;
+    const blob = reference.storageKey ? await getImageBlob(reference.storageKey) : await fetchBlob(reference.dataUrl, signal);
+    return uploadReferenceBlob(blob, reference.type, reference.storageKey, signal);
+}
+
+async function publicMediaUrl(reference: ReferenceVideo | ReferenceAudio, signal?: AbortSignal) {
+    if (isPublicUrl(reference.url)) return reference.url;
+    const blob = reference.storageKey ? await getMediaBlob(reference.storageKey) : await fetchBlob(reference.url, signal);
+    return uploadReferenceBlob(blob, reference.type, reference.storageKey, signal);
+}
+
+async function uploadReferenceBlob(blob: Blob | null, mimeType: string, storageKey?: string, signal?: AbortSignal) {
+    if (!blob) throw new Error(apiText("localAssetReadFailed"));
+    const cached = storageKey ? publicAssetUrls.get(storageKey) : undefined;
+    if (cached) return cached;
+    const normalized = blob.type === mimeType || !mimeType ? blob : new Blob([blob], { type: mimeType });
+    const url = await uploadR2Asset(normalized, signal);
+    if (storageKey) publicAssetUrls.set(storageKey, url);
+    return url;
+}
+
+async function fetchBlob(url: string, signal?: AbortSignal) {
+    if (!url) return null;
+    const response = await fetch(url, { signal });
+    if (!response.ok) throw new Error(apiText("localAssetReadFailed"));
+    return response.blob();
+}
+
+function isPublicUrl(value: unknown): value is string {
+    if (typeof value !== "string") return false;
+    try {
+        const url = new URL(value);
+        return (url.protocol === "https:" || url.protocol === "http:") && url.hostname !== "localhost" && url.hostname !== "127.0.0.1";
+    } catch {
+        return false;
+    }
+}
+
+function yyApiReferenceLimit(model: string) {
+    const name = modelOptionName(model).toLowerCase();
+    if (name === "veo31-fast") return 2;
+    if (name === "gemini-omni-flash" || name.includes("-431-")) return 4;
+    if (name.startsWith("manxue2.5-")) return 30;
+    return 9;
+}
+
+function validateYyApiMediaReferences(model: string, imageCount: number, videos: ReferenceVideo[], audios: ReferenceAudio[]) {
+    const name = modelOptionName(model).toLowerCase();
+    const supportsVideo = !name.startsWith("minimaxh3-") && name !== "gemini-omni-flash" && name !== "veo31-fast";
+    const supportsAudio = name !== "gemini-omni-flash" && name !== "veo31-fast";
+    if (videos.length > 1) throw new Error("当前视频接口只能提交一个参考视频");
+    if (videos.length && !supportsVideo) throw new Error("当前视频模型不支持参考视频");
+    if (audios.length && !supportsAudio) throw new Error("当前视频模型不支持参考音频");
+    const maxAudios = name.startsWith("manxue2.5-") ? 10 : name.includes("-431-") ? 1 : 3;
+    if (audios.length > maxAudios) throw new Error(`当前视频模型最多支持 ${maxAudios} 个参考音频`);
+    if (audios.some((audio) => audio.durationMs && (audio.durationMs < 2000 || audio.durationMs > 15_000)) || audios.reduce((total, audio) => total + (audio.durationMs || 0), 0) > 15_000) throw new Error("单个参考音频需为 2–15 秒，参考音频总时长不能超过 15 秒");
+    const maxReferences = name.startsWith("manxue2.5-") ? 30 : name.includes("-431-") ? 6 : 12;
+    if (imageCount + videos.length + audios.length > maxReferences) throw new Error(`当前视频模型最多支持 ${maxReferences} 个参考素材`);
+}
+
+function yyApiDuration(model: string, value: string) {
+    const name = modelOptionName(model).toLowerCase();
+    const requested = Math.floor(Number(value) || 6);
+    if (name.includes("-431-")) return 15;
+    if (name.startsWith("manxue2.5-")) return Math.max(5, Math.min(30, requested));
+    if (name.startsWith("minimaxh3-")) return Math.max(4, Math.min(15, requested));
+    if (name.includes("-933-")) return Math.max(5, Math.min(15, requested));
+    if (name === "gemini-omni-flash") return nearestNumber(requested, [4, 6, 8, 10]);
+    if (name === "veo31-fast") return nearestNumber(requested, [4, 6, 8]);
+    return Math.max(1, Math.min(30, requested));
+}
+
+function yyApiResolution(model: string, value: string) {
+    const name = modelOptionName(model).toLowerCase();
+    if (name.includes("-2k")) return "2k";
+    if (name.includes("1080p") || name === "veo31-fast") return "1080p";
+    if (name.includes("480p")) return "480p";
+    if (name.includes("720p") || name === "gemini-omni-flash") return "720p";
+    return normalizeVideoResolution(value);
+}
+
+function yyApiAspectRatio(model: string, value: string) {
+    const name = modelOptionName(model).toLowerCase();
+    const candidates = name === "veo31-fast" || name === "gemini-omni-flash" ? ["16:9", "9:16"] : ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
+    const match = value.match(/^(\d+(?:\.\d+)?)[x:](\d+(?:\.\d+)?)$/i);
+    const ratio = match ? Number(match[1]) / Number(match[2]) : 16 / 9;
+    return candidates.reduce((best, candidate) => {
+        const [width, height] = candidate.split(":").map(Number);
+        const bestParts = best.split(":").map(Number);
+        return Math.abs(Math.log(ratio / (width / height))) < Math.abs(Math.log(ratio / (bestParts[0] / bestParts[1]))) ? candidate : best;
+    }, candidates[0]);
+}
+
+function nearestNumber(value: number, candidates: number[]) {
+    return candidates.reduce((best, candidate) => (Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best), candidates[0]);
 }
 
 function unwrapVideoResponse(payload: ApiVideoResponse) {
