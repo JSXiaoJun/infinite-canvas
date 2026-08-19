@@ -5,7 +5,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
-- Docker 镜像发布：推送到 `main` 后应自动运行应用与文档 Docker workflow，并发布 `ghcr.io/jsxiaojun/infinite-canvas:latest` 与 `ghcr.io/jsxiaojun/infinite-canvas-docs:latest`；推送版本 tag 时仍应保留版本号和 SHA 标签。
+- Docker 镜像发布：推送任意分支后都应自动运行应用与文档 Docker workflow，并发布 SHA 标签镜像；推送 `main` 时还应发布 `ghcr.io/jsxiaojun/infinite-canvas:latest` 与 `ghcr.io/jsxiaojun/infinite-canvas-docs:latest`，推送版本 tag 时仍应保留版本号和 SHA 标签。
 - YYAPI 视频接口（手动渠道）：新增普通 OpenAI 渠道并填写 `https://zl.yyapi.cloud`、API Key 和兼容视频模型后，生成请求应使用 JSON 的 `duration`、`aspect_ratio`、`resolution` 和 `generate_audio` 字段，任务按 10 秒间隔轮询并在完成后读取公开 `video_url`；画布引用的本地图片、视频、音频应先自动上传到专用 R2，再分别通过 `image_urls`、`reference_video`、`audio_urls` 提交。同一素材在当前会话不应重复上传，其他 OpenAI 格式渠道的原有视频生成行为不应改变。
 
 - 画布选择与平移：左下工具栏应能切换「选择」与「移动」模式并用图标显示当前模式；选择模式拖动空白区域应显示疏朗清晰的虚线框，虚线长度、间距和粗细在任意缩放比例下保持一致；移动模式应能从空白区域或节点上拖动画布。按住 Control 或空格应临时反转当前工具且不改变工具栏模式，即选择变移动、移动变范围选择；点击画布页任意按钮后按空格应只临时切换工具，不得再次触发该按钮；输入框和可编辑文本内仍可正常输入空格。中键平移以及 Shift/Cmd 追加选择节点应继续可用。

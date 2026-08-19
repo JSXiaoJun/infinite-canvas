@@ -5,7 +5,7 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
-- Docker image publishing: a push to `main` should run both Docker workflows and publish `ghcr.io/jsxiaojun/infinite-canvas:latest` and `ghcr.io/jsxiaojun/infinite-canvas-docs:latest`; version tags should retain version and SHA tags.
+- Docker image publishing: every branch push should run both Docker workflows and publish SHA-tagged images; a `main` push should additionally publish `ghcr.io/jsxiaojun/infinite-canvas:latest` and `ghcr.io/jsxiaojun/infinite-canvas-docs:latest`, while version tags retain version and SHA tags.
 - YYAPI video integration (manual channel): after adding a normal OpenAI-format channel with `https://zl.yyapi.cloud` and selecting a compatible video model, generation requests should send JSON fields `duration`, `aspect_ratio`, `resolution`, and `generate_audio`, poll every 10 seconds, and consume the returned public `video_url`. Local canvas images, videos, and audio should be uploaded to the dedicated R2 first and submitted as `image_urls`, `reference_video`, and `audio_urls`; the same stored asset should not be uploaded twice during one session, and other OpenAI-format video channels should retain their existing behavior.
 
 The current release needs manual verification in these areas:
