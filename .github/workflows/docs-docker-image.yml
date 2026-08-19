@@ -2,6 +2,7 @@ name: Docs Docker image
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -10,7 +11,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/basketikun/infinite-canvas-docs
+  IMAGE_NAME: ghcr.io/jsxiaojun/infinite-canvas-docs
 
 jobs:
   meta:

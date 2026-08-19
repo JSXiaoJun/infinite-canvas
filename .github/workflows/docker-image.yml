@@ -2,6 +2,7 @@ name: Docker image
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -10,7 +11,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/basketikun/infinite-canvas
+  IMAGE_NAME: ghcr.io/jsxiaojun/infinite-canvas
 
 jobs:
   meta:
@@ -24,6 +25,7 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
             type=sha,prefix=
 
