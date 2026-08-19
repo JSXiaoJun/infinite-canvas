@@ -104,14 +104,6 @@ export const defaultConfig: AiConfig = {
                 { name: "gpt-4o-mini-tts", capability: "audio" },
             ],
         },
-        {
-            id: YYAPI_VIDEO_CHANNEL_ID,
-            name: "YYAPI 视频",
-            baseUrl: YYAPI_VIDEO_BASE_URL,
-            apiKey: "",
-            apiFormat: "openai",
-            models: YYAPI_VIDEO_MODELS.map((name) => ({ name, capability: "video" as const })),
-        },
     ],
     model: "default::gpt-image-2",
     imageModel: "default::gpt-image-2",
@@ -128,7 +120,7 @@ export const defaultConfig: AiConfig = {
     videoWatermark: "false",
     systemPrompt: "",
     reasoningEffort: "auto",
-    models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts", ...YYAPI_VIDEO_MODELS.map((name) => `${YYAPI_VIDEO_CHANNEL_ID}::${name}`)],
+    models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
     quality: "auto",
     size: "1:1",
     background: "",
@@ -263,7 +255,7 @@ export const useConfigStore = create<ConfigStore>()(
                         channels,
                         models,
                         imageModel: normalizeModelOptionValue(config.imageModel || config.model, channels),
-                        videoModel: normalizeModelOptionValue(config.videoModel, channels),
+                        videoModel: normalizeModelOptionValue(config.videoModel, channels) || defaultConfig.videoModel,
                         textModel: normalizeModelOptionValue(config.textModel || config.model, channels),
                         audioModel: normalizeModelOptionValue(config.audioModel || defaultConfig.audioModel, channels),
                         audioVoice: config.audioVoice || defaultConfig.audioVoice,
@@ -400,21 +392,7 @@ function normalizeChannels(config: AiConfig) {
             }),
         );
     }
-    const yyapi = channels.find((channel) => channel.id === YYAPI_VIDEO_CHANNEL_ID) || channels.find((channel) => channel.models.some((model) => isYyApiVideoModel(model.name)));
-    const fixedChannel = createModelChannel({
-        id: YYAPI_VIDEO_CHANNEL_ID,
-        name: "YYAPI 视频",
-        baseUrl: YYAPI_VIDEO_BASE_URL,
-        apiKey: yyapi?.apiKey || "",
-        apiFormat: "openai",
-        models: YYAPI_VIDEO_MODELS.map((name) => ({ name, capability: "video" })),
-    });
-    return [
-        ...channels
-            .filter((channel) => channel.id !== YYAPI_VIDEO_CHANNEL_ID)
-            .map((channel) => ({ ...channel, models: channel.models.filter((model) => !isYyApiVideoModel(model.name)) })),
-        fixedChannel,
-    ];
+    return channels.filter((channel) => channel.id !== YYAPI_VIDEO_CHANNEL_ID);
 }
 
 export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
