@@ -5,7 +5,7 @@ import i18n from "@/i18n";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { getMediaBlob, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { getImageBlob, imageToDataUrl } from "@/services/image-storage";
-import { boolConfig, buildApiUrl, isYyApiVideoModel, modelOptionName, resolveModelRequestConfig, resolveModelScript, YYAPI_VIDEO_BASE_URL, type AiConfig } from "@/stores/use-config-store";
+import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@/stores/use-config-store";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import { runModelPlugin } from "./model-plugin";
 import { uploadR2Asset } from "./r2-assets";
@@ -18,7 +18,7 @@ type RequestOptions = { signal?: AbortSignal; referenceVideos?: ReferenceVideo[]
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
-export type VideoGenerationTask = { id: string; provider: "openai" | "yyapi" | "plugin"; model: string };
+export type VideoGenerationTask = { id: string; provider: "openai" | "sora" | "plugin"; model: string };
 export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
 export type VideoTaskPollingOptions = { intervalMs: number; maxAttempts: number };
 
@@ -53,16 +53,16 @@ export async function requestVideoGeneration(config: AiConfig, prompt: string, r
 
 export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], options?: RequestOptions): Promise<VideoGenerationTask> {
     const selectedModel = (config.model || config.videoModel).trim();
-    const requestConfig = videoRequestConfig(config, selectedModel);
-    const script = isYyApiVideoModel(selectedModel) ? undefined : resolveModelScript(config, selectedModel);
+    const requestConfig = resolveModelRequestConfig(config, selectedModel);
+    const script = resolveModelScript(config, selectedModel);
     if (script) return createPluginVideoTask(requestConfig, selectedModel, script, prompt, references, options);
     assertVideoConfig(requestConfig, requestConfig.model);
-    if (isYyApiVideoConfig(requestConfig)) return createYyApiVideoTask(requestConfig, selectedModel, prompt, references, options);
+    if (requestConfig.apiFormat === "sora") return createSoraVideoTask(requestConfig, selectedModel, prompt, references, options);
     return createOpenAIVideoTask(requestConfig, selectedModel, prompt, references, options);
 }
 
 export function videoTaskPollingOptions(task: VideoGenerationTask): VideoTaskPollingOptions {
-    return task.provider === "yyapi" ? { intervalMs: 10_000, maxAttempts: 720 } : { intervalMs: 2500, maxAttempts: 120 };
+    return task.provider === "sora" ? { intervalMs: 10_000, maxAttempts: 720 } : { intervalMs: 2500, maxAttempts: 120 };
 }
 
 export async function pollVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
@@ -70,7 +70,7 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
         const result = pluginVideoResults.get(task.id);
         return result ? { status: "completed", result } : { status: "failed", error: apiText("pluginVideoExpired") };
     }
-    const requestConfig = videoRequestConfig(config, task.model, task.provider === "yyapi");
+    const requestConfig = resolveModelRequestConfig(config, task.model);
     assertVideoConfig(requestConfig, requestConfig.model);
     return pollOpenAIVideoTask(requestConfig, task, options);
 }
@@ -145,12 +145,9 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
     }
 }
 
-async function createYyApiVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
-    const referenceLimit = yyApiReferenceLimit(model);
-    if (references.length > referenceLimit) throw new Error(apiText("yyapiReferenceLimit", { count: referenceLimit }));
+async function createSoraVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
     const referenceVideos = options?.referenceVideos || [];
     const referenceAudios = options?.referenceAudios || [];
-    validateYyApiMediaReferences(model, references.length, referenceVideos, referenceAudios);
     const [imageUrls, videoUrls, audioUrls] = await Promise.all([
         Promise.all(references.map((reference) => publicImageUrl(reference, options?.signal))),
         Promise.all(referenceVideos.map((reference) => publicMediaUrl(reference, options?.signal))),
@@ -159,9 +156,9 @@ async function createYyApiVideoTask(config: AiConfig, model: string, prompt: str
     const body = {
         model: modelOptionName(model),
         prompt,
-        duration: yyApiDuration(model, config.videoSeconds),
-        aspect_ratio: yyApiAspectRatio(model, config.size),
-        resolution: yyApiResolution(model, config.vquality),
+        duration: Math.max(1, Math.min(30, Math.floor(Number(config.videoSeconds) || 6))),
+        aspect_ratio: normalizeSoraAspectRatio(config.size),
+        resolution: normalizeVideoResolution(config.vquality),
         generate_audio: boolConfig(config.videoGenerateAudio, true),
         ...(imageUrls.length ? { image_urls: imageUrls } : {}),
         ...(videoUrls[0] ? { reference_video: videoUrls[0] } : {}),
@@ -171,7 +168,7 @@ async function createYyApiVideoTask(config: AiConfig, model: string, prompt: str
         const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(aiApiUrl(config, "/videos"), body, { headers: aiHeaders(config, "application/json"), signal: options?.signal })).data);
         const taskId = created.task_id || created.id;
         if (!taskId) throw new Error(apiText("noVideoTaskId"));
-        return { id: taskId, provider: "yyapi", model };
+        return { id: taskId, provider: "sora", model };
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("videoTaskCreateFailed")));
     }
@@ -183,7 +180,6 @@ async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, 
         const url = videoResultUrl(video);
         if (url) return { status: "completed", result: await videoResultFromUrl(url, options) };
         if (video.status === "completed") {
-            if (task.provider === "yyapi") return { status: "completed", result: await videoResultFromUrl(`https://media.yyapi.cloud/public/videos/${encodeURIComponent(task.id)}/content`, options) };
             const content = await axios.get<Blob>(aiApiUrl(config, `/videos/${task.id}/content`), { headers: aiHeaders(config), responseType: "blob", signal: options?.signal });
             await assertVideoBlob(content.data);
             return { status: "completed", result: { blob: content.data } };
@@ -233,17 +229,15 @@ function normalizeVideoResolution(value: string) {
     return `${resolution}p`;
 }
 
-function isYyApiVideoConfig(config: AiConfig) {
-    try {
-        return new URL(config.baseUrl).hostname.toLowerCase() === new URL(YYAPI_VIDEO_BASE_URL).hostname;
-    } catch {
-        return config.baseUrl.trim().toLowerCase().startsWith(YYAPI_VIDEO_BASE_URL);
-    }
-}
-
-function videoRequestConfig(config: AiConfig, model: string, forceYyApi = false) {
-    const resolved = resolveModelRequestConfig(config, model);
-    return forceYyApi || isYyApiVideoModel(model) ? { ...resolved, baseUrl: YYAPI_VIDEO_BASE_URL, apiFormat: "openai" as const } : resolved;
+function normalizeSoraAspectRatio(value: string) {
+    const candidates = ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
+    const match = value.match(/^(\d+(?:\.\d+)?)[x:](\d+(?:\.\d+)?)$/i);
+    const ratio = match ? Number(match[1]) / Number(match[2]) : 16 / 9;
+    return candidates.reduce((best, candidate) => {
+        const [width, height] = candidate.split(":").map(Number);
+        const [bestWidth, bestHeight] = best.split(":").map(Number);
+        return Math.abs(Math.log(ratio / (width / height))) < Math.abs(Math.log(ratio / (bestWidth / bestHeight))) ? candidate : best;
+    }, candidates[0]);
 }
 
 async function publicImageUrl(reference: ReferenceImage, signal?: AbortSignal) {
@@ -284,65 +278,6 @@ function isPublicUrl(value: unknown): value is string {
     } catch {
         return false;
     }
-}
-
-function yyApiReferenceLimit(model: string) {
-    const name = modelOptionName(model).toLowerCase();
-    if (name === "veo31-fast") return 2;
-    if (name === "gemini-omni-flash" || name.includes("-431-")) return 4;
-    if (name.startsWith("manxue2.5-")) return 30;
-    return 9;
-}
-
-function validateYyApiMediaReferences(model: string, imageCount: number, videos: ReferenceVideo[], audios: ReferenceAudio[]) {
-    const name = modelOptionName(model).toLowerCase();
-    const supportsVideo = !name.startsWith("minimaxh3-") && name !== "gemini-omni-flash" && name !== "veo31-fast";
-    const supportsAudio = name !== "gemini-omni-flash" && name !== "veo31-fast";
-    if (videos.length > 1) throw new Error("当前视频接口只能提交一个参考视频");
-    if (videos.length && !supportsVideo) throw new Error("当前视频模型不支持参考视频");
-    if (audios.length && !supportsAudio) throw new Error("当前视频模型不支持参考音频");
-    const maxAudios = name.startsWith("manxue2.5-") ? 10 : name.includes("-431-") ? 1 : 3;
-    if (audios.length > maxAudios) throw new Error(`当前视频模型最多支持 ${maxAudios} 个参考音频`);
-    if (audios.some((audio) => audio.durationMs && (audio.durationMs < 2000 || audio.durationMs > 15_000)) || audios.reduce((total, audio) => total + (audio.durationMs || 0), 0) > 15_000) throw new Error("单个参考音频需为 2–15 秒，参考音频总时长不能超过 15 秒");
-    const maxReferences = name.startsWith("manxue2.5-") ? 30 : name.includes("-431-") ? 6 : 12;
-    if (imageCount + videos.length + audios.length > maxReferences) throw new Error(`当前视频模型最多支持 ${maxReferences} 个参考素材`);
-}
-
-function yyApiDuration(model: string, value: string) {
-    const name = modelOptionName(model).toLowerCase();
-    const requested = Math.floor(Number(value) || 6);
-    if (name.includes("-431-")) return 15;
-    if (name.startsWith("manxue2.5-")) return Math.max(5, Math.min(30, requested));
-    if (name.startsWith("minimaxh3-")) return Math.max(4, Math.min(15, requested));
-    if (name.includes("-933-")) return Math.max(5, Math.min(15, requested));
-    if (name === "gemini-omni-flash") return nearestNumber(requested, [4, 6, 8, 10]);
-    if (name === "veo31-fast") return nearestNumber(requested, [4, 6, 8]);
-    return Math.max(1, Math.min(30, requested));
-}
-
-function yyApiResolution(model: string, value: string) {
-    const name = modelOptionName(model).toLowerCase();
-    if (name.includes("-2k")) return "2k";
-    if (name.includes("1080p") || name === "veo31-fast") return "1080p";
-    if (name.includes("480p")) return "480p";
-    if (name.includes("720p") || name === "gemini-omni-flash") return "720p";
-    return normalizeVideoResolution(value);
-}
-
-function yyApiAspectRatio(model: string, value: string) {
-    const name = modelOptionName(model).toLowerCase();
-    const candidates = name === "veo31-fast" || name === "gemini-omni-flash" ? ["16:9", "9:16"] : ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
-    const match = value.match(/^(\d+(?:\.\d+)?)[x:](\d+(?:\.\d+)?)$/i);
-    const ratio = match ? Number(match[1]) / Number(match[2]) : 16 / 9;
-    return candidates.reduce((best, candidate) => {
-        const [width, height] = candidate.split(":").map(Number);
-        const bestParts = best.split(":").map(Number);
-        return Math.abs(Math.log(ratio / (width / height))) < Math.abs(Math.log(ratio / (bestParts[0] / bestParts[1]))) ? candidate : best;
-    }, candidates[0]);
-}
-
-function nearestNumber(value: number, candidates: number[]) {
-    return candidates.reduce((best, candidate) => (Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best), candidates[0]);
 }
 
 function unwrapVideoResponse(payload: ApiVideoResponse) {

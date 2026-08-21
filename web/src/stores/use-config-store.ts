@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
 
-export type ApiCallFormat = "openai" | "gemini";
+export type ApiCallFormat = "openai" | "gemini" | "sora";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
 
@@ -66,24 +66,7 @@ export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
 const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
-export const YYAPI_VIDEO_BASE_URL = "https://zl.yyapi.cloud";
 export const YYAPI_VIDEO_CHANNEL_ID = "yyapi-video";
-export const YYAPI_VIDEO_MODELS = [
-    "MiniMaxH3-2k",
-    "MiniMaxH3-2k-pro",
-    "MiniMaxH3-480p",
-    "MiniMaxH3-720p",
-    "fast-431-720p",
-    "fast-933-480p",
-    "fast-933-720p",
-    "gemini-omni-flash",
-    "manxue-431-720p",
-    "manxue-933-1080p",
-    "manxue-933-480p",
-    "manxue-933-720p",
-    "manxue2.5-301010-720p",
-    "veo31-fast",
-] as const;
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
@@ -325,10 +308,6 @@ export function modelOptionName(value: string) {
     return decodeChannelModel(value)?.model || value;
 }
 
-export function isYyApiVideoModel(value: string) {
-    return (YYAPI_VIDEO_MODELS as readonly string[]).includes(modelOptionName(value));
-}
-
 export function modelOptionLabel(config: AiConfig, value: string) {
     const decoded = decodeChannelModel(value);
     if (!decoded) return value;
@@ -397,11 +376,12 @@ function normalizeChannels(config: AiConfig) {
 
 export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
     if (apiFormat === "gemini") return GEMINI_BASE_URL;
+    if (apiFormat === "sora") return "";
     return OPENAI_BASE_URL;
 }
 
 function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
-    return apiFormat === "gemini" ? apiFormat : "openai";
+    return apiFormat === "gemini" || apiFormat === "sora" ? apiFormat : "openai";
 }
 
 function uniqueModelOptions(models: string[]) {

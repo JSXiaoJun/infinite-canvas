@@ -774,6 +774,48 @@ function InfiniteCanvasPage() {
         if (next.type !== CanvasNodeType.Group) setDialogNodeId(id);
     }, []);
 
+    const clearNodeResult = useCallback(
+        (nodeId: string) => {
+            let runningNodeId: string | null = null;
+            generationRequestsRef.current.forEach((request, targetNodeId) => {
+                if (targetNodeId !== nodeId && request.originNodeId !== nodeId) return;
+                request.controller.abort();
+                generationRequestsRef.current.delete(targetNodeId);
+                runningNodeId = request.runningNodeId;
+            });
+            const nextNodes = nodesRef.current.map((node) =>
+                node.id === nodeId
+                    ? {
+                          ...node,
+                          metadata: {
+                              ...node.metadata,
+                              content: "",
+                              status: NODE_STATUS_IDLE,
+                              errorDetails: undefined,
+                              images: undefined,
+                              primaryImageId: undefined,
+                              storageKey: undefined,
+                              naturalWidth: undefined,
+                              naturalHeight: undefined,
+                              bytes: undefined,
+                              mimeType: undefined,
+                              durationMs: undefined,
+                          },
+                      }
+                    : node,
+            );
+            setNodes(nextNodes);
+            setRunningNodeId((current) => (current === nodeId || current === runningNodeId ? null : current));
+            setExpandedImageNodeIds((current) => new Set([...current].filter((id) => id !== nodeId)));
+            setCropNodeId((current) => (current === nodeId ? null : current));
+            setMaskEditNodeId((current) => (current === nodeId ? null : current));
+            setAngleNodeId((current) => (current === nodeId ? null : current));
+            setPreviewNodeId((current) => (current === nodeId ? null : current));
+            cleanupCanvasFiles({ projectId, nodes: nextNodes, chatSessions });
+        },
+        [chatSessions, cleanupCanvasFiles, projectId],
+    );
+
     const copySelectedNodes = useCallback(() => {
         const selectedIds = selectedNodeIdsRef.current;
         if (!selectedIds.size) return;
@@ -2954,6 +2996,11 @@ function InfiniteCanvasPage() {
                         onDuplicate={() => {
                             if (contextMenu.type !== "node") return;
                             duplicateNode(contextMenu.nodeId);
+                            setContextMenu(null);
+                        }}
+                        onClearResult={() => {
+                            if (contextMenu.type !== "node") return;
+                            clearNodeResult(contextMenu.nodeId);
                             setContextMenu(null);
                         }}
                         onDelete={() => {
