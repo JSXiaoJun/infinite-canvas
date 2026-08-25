@@ -5,7 +5,7 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
-- 图片接口响应兼容：使用返回 `data` 数组、单个对象、字符串化 JSON，以及 `b64_json` 带 MIME 前缀或换行的 OpenAI 兼容渠道生成图片；响应应正常反显并可下载，不应显示“全部图片生成失败”。
+- 图片接口响应兼容：使用返回 `data` 数组、单个对象、字符串化 JSON，以及 `b64_json` 带 MIME 前缀或换行的 OpenAI 兼容渠道生成图片；图片应能直接写入本地存储并正常反显、下载，不应显示“全部图片生成失败”。
 
 - Docker image publishing: every branch push should run both Docker workflows and publish SHA-tagged images; a `main` push should additionally publish `ghcr.io/jsxiaojun/infinite-canvas:latest` and `ghcr.io/jsxiaojun/infinite-canvas-docs:latest`, while version tags retain version and SHA tags.
 - Sora video protocol: selecting Sora for any provider should use its configured base URL and send JSON fields `model`, `prompt`, `duration`, `aspect_ratio`, `resolution`, and `generate_audio`, without relying on a model allowlist. It should poll the returned `task_id` or `id` every 10 seconds and consume a returned public video URL or the compatible content endpoint. Local canvas images, videos, and audio should be uploaded to the dedicated R2 first and submitted as `image_urls`, `reference_video`, and `audio_urls`; the same stored asset should not be uploaded twice during one session. OpenAI and Gemini provider behavior should remain unchanged.

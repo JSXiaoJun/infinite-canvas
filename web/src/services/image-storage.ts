@@ -19,13 +19,35 @@ const videoLogStore = localforage.createInstance({ name: "infinite-canvas", stor
 const objectUrls = new Map<string, string>();
 
 export async function uploadImage(input: string | Blob): Promise<UploadedImage> {
-    const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
+    const blob = typeof input === "string" ? await imageInputToBlob(input) : input;
     const storageKey = `image:${nanoid()}`;
     await store.setItem(storageKey, blob);
     const url = URL.createObjectURL(blob);
     objectUrls.set(storageKey, url);
     const meta = await readImageMeta(url);
     return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type || meta.mimeType };
+}
+
+async function imageInputToBlob(input: string) {
+    if (!/^data:/i.test(input)) {
+        const response = await fetch(input);
+        if (!response.ok) throw new Error(i18n.t("common.imageReadFailed"));
+        return response.blob();
+    }
+    const match = input.match(/^data:([^;,]+)?(;base64)?,([\s\S]*)$/i);
+    if (!match) throw new Error(i18n.t("common.imageReadFailed"));
+    const mimeType = match[1] || "application/octet-stream";
+    const content = match[3].replace(/\s+/g, "");
+    if (!match[2]) return new Blob([decodeURIComponent(match[3])], { type: mimeType });
+    try {
+        const normalized = content.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(content.length / 4) * 4, "=");
+        const binary = atob(normalized);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        return new Blob([bytes], { type: mimeType });
+    } catch {
+        throw new Error(i18n.t("common.imageReadFailed"));
+    }
 }
 
 export async function resolveImageUrl(storageKey?: string, fallback = "") {
