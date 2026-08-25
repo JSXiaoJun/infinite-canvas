@@ -71,7 +71,9 @@ type ResponseApiPayload = {
 type ResponseStreamState = { buffer: string; text: string; payload?: ResponseApiPayload; error?: string };
 
 type ImageApiResponse = {
-    data?: Array<Record<string, unknown>>;
+    data?: unknown;
+    images?: unknown;
+    results?: unknown;
     error?: { message?: string };
     code?: number;
     msg?: string;
@@ -233,25 +235,61 @@ function supportsGeminiImageSize(model: string) {
     return value.includes("gemini-3") || value.includes("3.1") || value.includes("3-pro");
 }
 
-function resolveImageDataUrl(item: Record<string, unknown>) {
-    if (typeof item.b64_json === "string" && item.b64_json) {
-        return `data:image/png;base64,${item.b64_json}`;
+function resolveImageDataUrl(value: unknown) {
+    if (typeof value === "string") {
+        const source = value.trim();
+        if (!source) return null;
+        if (/^data:/i.test(source) || /^https?:\/\//i.test(source) || source.startsWith("blob:")) return source;
+        return `data:image/png;base64,${source.replace(/\s+/g, "")}`;
     }
-    if (typeof item.url === "string" && item.url) {
-        return item.url;
+    if (!value || typeof value !== "object") return null;
+    const item = value as Record<string, unknown>;
+    const mimeType = typeof item.mimeType === "string" ? item.mimeType : typeof item.mime_type === "string" ? item.mime_type : "image/png";
+    const encoded = [item.b64_json, item.b64Json, item.base64, item.data].find((item) => typeof item === "string" && item.trim());
+    if (typeof encoded === "string") {
+        const source = encoded.trim();
+        return /^data:/i.test(source) ? source : `data:${mimeType};base64,${source.replace(/\s+/g, "")}`;
     }
+    if (typeof item.url === "string" && item.url.trim()) return item.url.trim();
     return null;
 }
 
-function parseImagePayload(payload: ImageApiResponse) {
+function parseImageItems(value: unknown): unknown[] {
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+        const source = value.trim();
+        if (!source) return [];
+        try {
+            return parseImageItems(JSON.parse(source));
+        } catch {
+            return [source];
+        }
+    }
+    if (value && typeof value === "object") {
+        const record = value as Record<string, unknown>;
+        if ([record.b64_json, record.b64Json, record.base64, record.url, record.mimeType, record.mime_type].some((item) => typeof item === "string" && item.trim())) return [value];
+        if (record.data !== undefined && record.data !== value) return parseImageItems(record.data);
+        return [value];
+    }
+    return [];
+}
+
+function parseImagePayload(rawPayload: ImageApiResponse | string) {
+    let parsed: unknown = rawPayload;
+    for (let depth = 0; depth < 2 && typeof parsed === "string"; depth += 1) {
+        try {
+            parsed = JSON.parse(parsed);
+        } catch {
+            throw new Error(apiText("unknownImageResponse", { fields: "invalid JSON" }));
+        }
+    }
+    if (!parsed || typeof parsed !== "object") throw new Error(apiText("unknownImageResponse", { fields: "invalid JSON" }));
+    const payload = parsed as ImageApiResponse;
     if (typeof payload.code === "number" && payload.code !== 0) {
         throw new Error(payload.msg || apiText("requestFailed"));
     }
     // Support data, images, and results response fields used by different APIs.
-    const imageList = payload.data
-        || (payload as Record<string, unknown>).images as Array<Record<string, unknown>> | undefined
-        || (payload as Record<string, unknown>).results as Array<Record<string, unknown>> | undefined
-        || [];
+    const imageList = parseImageItems(payload.data ?? payload.images ?? payload.results ?? payload);
     const images =
         imageList
             .map(resolveImageDataUrl)
