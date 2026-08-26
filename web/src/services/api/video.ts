@@ -11,7 +11,7 @@ import { runModelPlugin } from "./model-plugin";
 import { uploadR2Asset } from "./r2-assets";
 import type { ReferenceImage } from "@/types/image";
 
-type VideoResponse = { id?: string; task_id?: string; status?: string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; content?: { video_url?: string; url?: string } | null };
+type VideoResponse = { id?: string; task_id?: string; status?: string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; download_url?: string; content?: { video_url?: string; url?: string; download_url?: string } | null };
 type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
 type ApiEnvelope<T> = T | { code?: number | string; data?: T | null; msg?: string; message?: string; error?: { message?: string } };
 type RequestOptions = { signal?: AbortSignal; referenceVideos?: ReferenceVideo[]; referenceAudios?: ReferenceAudio[] };
@@ -25,6 +25,7 @@ export type VideoTaskPollingOptions = { intervalMs: number; maxAttempts: number 
 /** Results for scripted (plugin) video models, which run their own create+poll in one shot at task creation. */
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
 const publicAssetUrls = new Map<string, string>();
+const VIDEO_REQUEST_TIMEOUT_MS = 30_000;
 
 function aiApiUrl(config: AiConfig, path: string) {
     return buildApiUrl(config.baseUrl, path);
@@ -104,23 +105,25 @@ async function createPluginVideoTask(config: AiConfig, model: string, script: st
 
 function videoPluginResult(result: unknown): VideoGenerationResult {
     if (result instanceof Blob) return { blob: result };
-    if (typeof result === "string") return { url: result, mimeType: "video/mp4" };
+    if (typeof result === "string") return { url: normalizeVideoUrl(result), mimeType: "video/mp4" };
     if (result && typeof result === "object") {
         const record = result as Record<string, unknown>;
         if (record.blob instanceof Blob) return { blob: record.blob };
-        const url = [record.url, record.video_url, record.result_url].find((value) => typeof value === "string" && value) as string | undefined;
+        const url = [record.url, record.video_url, record.result_url, record.download_url].map(normalizeVideoUrl).find(Boolean);
         if (url) return { url, mimeType: "video/mp4" };
     }
     throw new Error(apiText("scriptNoVideo"));
 }
 
-export async function storeGeneratedVideo(result: VideoGenerationResult): Promise<UploadedFile> {
+export async function storeGeneratedVideo(result: VideoGenerationResult, options?: RequestOptions): Promise<UploadedFile> {
     if (result.blob) return uploadMediaFile(result.blob, "video");
     if (result.url) {
+        const url = normalizeVideoUrl(result.url);
         try {
-            return await uploadMediaFile(result.url, "video");
-        } catch {
-            return { url: result.url, storageKey: "", bytes: 0, mimeType: result.mimeType || "video/mp4" };
+            return await uploadMediaFile(url, "video", { signal: options?.signal });
+        } catch (error) {
+            if (options?.signal?.aborted) throw error;
+            return { url, storageKey: "", bytes: 0, mimeType: result.mimeType || "video/mp4" };
         }
     }
     throw new Error(apiText("noPlayableVideo"));
@@ -176,29 +179,19 @@ async function createSoraVideoTask(config: AiConfig, model: string, prompt: stri
 
 async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
     try {
-        const video = unwrapVideoResponse((await axios.get<ApiVideoResponse>(aiApiUrl(config, `/videos/${task.id}`), { headers: aiHeaders(config), signal: options?.signal })).data);
+        const video = unwrapVideoResponse((await axios.get<ApiVideoResponse>(aiApiUrl(config, `/videos/${task.id}`), { headers: aiHeaders(config), signal: options?.signal, timeout: VIDEO_REQUEST_TIMEOUT_MS })).data);
         const url = videoResultUrl(video);
-        if (url) return { status: "completed", result: await videoResultFromUrl(url, options) };
-        if (video.status === "completed") {
-            const content = await axios.get<Blob>(aiApiUrl(config, `/videos/${task.id}/content`), { headers: aiHeaders(config), responseType: "blob", signal: options?.signal });
+        if (url) return { status: "completed", result: { url, mimeType: "video/mp4" } };
+        const status = video.status?.trim().toLowerCase();
+        if (status === "completed") {
+            const content = await axios.get<Blob>(aiApiUrl(config, `/videos/${task.id}/content`), { headers: aiHeaders(config), responseType: "blob", signal: options?.signal, timeout: VIDEO_REQUEST_TIMEOUT_MS });
             await assertVideoBlob(content.data);
             return { status: "completed", result: { blob: content.data } };
         }
-        if (video.status === "failed" || video.status === "cancelled") return { status: "failed", error: readApiErrorMessage(video.error?.message) || apiText("videoGenerationFailed") };
+        if (status === "failed" || status === "cancelled") return { status: "failed", error: readApiErrorMessage(video.error?.message) || apiText("videoGenerationFailed") };
         return { status: "pending" };
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("videoTaskQueryFailed")));
-    }
-}
-
-async function videoResultFromUrl(url: string, options?: RequestOptions): Promise<VideoGenerationResult> {
-    try {
-        const response = await axios.get<Blob>(url, { responseType: "blob", signal: options?.signal });
-        await assertVideoBlob(response.data);
-        return { blob: response.data };
-    } catch (error) {
-        if (axios.isCancel(error) || options?.signal?.aborted) throw error;
-        return { url, mimeType: "video/mp4" };
     }
 }
 
@@ -295,7 +288,15 @@ function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
 }
 
 function videoResultUrl(payload: VideoResponse) {
-    return [payload.video_url, payload.result_url, payload.url, payload.content?.video_url, payload.content?.url].find((url) => typeof url === "string" && (isPublicMediaUrl(url) || /\.mp4(\?|#|$)/i.test(url)));
+    return [payload.video_url, payload.result_url, payload.url, payload.download_url, payload.content?.video_url, payload.content?.url, payload.content?.download_url]
+        .map(normalizeVideoUrl)
+        .find((url) => isPublicMediaUrl(url) || /\.mp4(\?|#|$)/i.test(url));
+}
+
+function normalizeVideoUrl(value: unknown) {
+    if (typeof value !== "string") return "";
+    const url = value.trim();
+    return url.match(/^\[[^\]]*\]\((https?:\/\/[^)\s]+)\)$/i)?.[1] || url;
 }
 
 function readApiErrorMessage(value: unknown): string {

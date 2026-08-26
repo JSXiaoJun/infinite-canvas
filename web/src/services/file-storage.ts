@@ -2,12 +2,15 @@ import localforage from "localforage";
 import { nanoid } from "nanoid";
 
 export type UploadedFile = { url: string; storageKey: string; bytes: number; mimeType: string; width?: number; height?: number; durationMs?: number };
+export type MediaUploadOptions = { signal?: AbortSignal; timeoutMs?: number };
 
 const store = localforage.createInstance({ name: "infinite-canvas", storeName: "media_files" });
 const objectUrls = new Map<string, string>();
+const MEDIA_DOWNLOAD_TIMEOUT_MS = 30_000;
+const MEDIA_META_TIMEOUT_MS = 10_000;
 
-export async function uploadMediaFile(input: string | Blob, prefix = "file"): Promise<UploadedFile> {
-    const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
+export async function uploadMediaFile(input: string | Blob, prefix = "file", options?: MediaUploadOptions): Promise<UploadedFile> {
+    const blob = typeof input === "string" ? await fetchMediaBlob(input, options) : input;
     const storageKey = `${prefix}:${nanoid()}`;
     await store.setItem(storageKey, blob);
     const url = URL.createObjectURL(blob);
@@ -68,9 +71,19 @@ export function collectMediaStorageKeys(value: unknown, keys = new Set<string>()
 function readVideoMeta(url: string) {
     return new Promise<{ width: number; height: number; durationMs?: number }>((resolve) => {
         const video = document.createElement("video");
-        const done = () => resolve({ width: video.videoWidth || 1280, height: video.videoHeight || 720, durationMs: Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined });
+        let settled = false;
+        const done = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            video.onloadedmetadata = null;
+            video.onerror = null;
+            resolve({ width: video.videoWidth || 1280, height: video.videoHeight || 720, durationMs: Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined });
+        };
+        const timer = setTimeout(done, MEDIA_META_TIMEOUT_MS);
         video.onloadedmetadata = done;
         video.onerror = done;
+        video.preload = "metadata";
         video.src = url;
     });
 }
@@ -78,9 +91,38 @@ function readVideoMeta(url: string) {
 function readAudioMeta(url: string) {
     return new Promise<{ durationMs?: number }>((resolve) => {
         const audio = document.createElement("audio");
-        const done = () => resolve({ durationMs: Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : undefined });
+        let settled = false;
+        const done = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            audio.onloadedmetadata = null;
+            audio.onerror = null;
+            resolve({ durationMs: Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : undefined });
+        };
+        const timer = setTimeout(done, MEDIA_META_TIMEOUT_MS);
         audio.onloadedmetadata = done;
         audio.onerror = done;
+        audio.preload = "metadata";
         audio.src = url;
     });
+}
+
+async function fetchMediaBlob(url: string, options?: MediaUploadOptions) {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    const timeout = setTimeout(abort, options?.timeoutMs ?? MEDIA_DOWNLOAD_TIMEOUT_MS);
+    options?.signal?.addEventListener("abort", abort, { once: true });
+    try {
+        if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) throw new Error(`Media download failed (${response.status})`);
+        return response.blob();
+    } catch (error) {
+        if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        throw error;
+    } finally {
+        clearTimeout(timeout);
+        options?.signal?.removeEventListener("abort", abort);
+    }
 }
