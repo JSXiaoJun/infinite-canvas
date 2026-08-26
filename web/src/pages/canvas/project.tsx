@@ -2040,6 +2040,7 @@ function InfiniteCanvasPage() {
 
     const handleGenerateNode = useCallback(
         async (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string) => {
+            if (Array.from(generationRequestsRef.current.values()).some((request) => request.runningNodeId === nodeId)) return;
             const sourceNode = nodesRef.current.find((node) => node.id === nodeId);
             const generationConfig = buildGenerationConfig(effectiveConfig, sourceNode, mode);
             if (!isAiConfigReady(generationConfig, generationConfig.model)) {
@@ -2098,13 +2099,13 @@ function InfiniteCanvasPage() {
             const effectivePrompt = generationContext.prompt.trim();
             if (runController.signal.aborted) {
                 finishGenerationRequest(nodeId, runController);
-                setRunningNodeId(null);
+                setRunningNodeId((current) => (current === nodeId ? null : current));
                 return;
             }
             const markSourceStatus = sourceNode?.type !== CanvasNodeType.Image && !editingTextNode;
             if (!effectivePrompt && (mode === "text" || mode === "audio")) {
                 finishGenerationRequest(nodeId, runController);
-                setRunningNodeId(null);
+                setRunningNodeId((current) => (current === nodeId ? null : current));
                 return;
             }
             let pendingChildIds: string[] = [];
@@ -2424,7 +2425,16 @@ function InfiniteCanvasPage() {
                     ),
                 );
             } catch (error) {
-                if (isGenerationCanceled(error)) return;
+                if (isGenerationCanceled(error)) {
+                    setNodes((prev) =>
+                        prev.map((node) =>
+                            pendingChildIds.includes(node.id) && node.metadata?.status === NODE_STATUS_LOADING
+                                ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_IDLE, errorDetails: undefined, images: node.metadata.images?.map((image) => (image.status === NODE_STATUS_LOADING ? { ...image, status: NODE_STATUS_ERROR, errorDetails: t("common.requestCanceled") } : image)) } }
+                                : node,
+                        ),
+                    );
+                    return;
+                }
                 const errorDetails = error instanceof Error ? error.message : t("canvas.projectPage.generationFailed");
                 message.error(errorDetails);
                 setNodes((prev) =>
@@ -2432,7 +2442,7 @@ function InfiniteCanvasPage() {
                 );
             } finally {
                 finishGenerationRequest(nodeId, runController);
-                setRunningNodeId(null);
+                setRunningNodeId((current) => (current === nodeId ? null : current));
             }
         },
         [effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, startGenerationRequest, t],
@@ -2443,6 +2453,7 @@ function InfiniteCanvasPage() {
 
     const handleRetryNode = useCallback(
         async (node: CanvasNodeData, imageId?: string) => {
+            if (Array.from(generationRequestsRef.current.values()).some((request) => request.runningNodeId === node.id)) return;
             const sourceNode = findRetrySourceNode(node.id, nodesRef.current, connectionsRef.current) || node;
             const savedImageMetadata = node.type === CanvasNodeType.Image ? node.metadata : undefined;
             const hasSavedImageMetadata = Boolean(savedImageMetadata?.generationType);
@@ -2594,7 +2605,7 @@ function InfiniteCanvasPage() {
                 setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, status: item.metadata?.content ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR, errorDetails: item.metadata?.content ? undefined : errorDetails, images: item.metadata?.images?.map((image) => (image.id === imageId ? { ...image, status: NODE_STATUS_ERROR, errorDetails } : image)) } } : item)));
             } finally {
                 finishGenerationRequest(node.id, controller);
-                setRunningNodeId(null);
+                setRunningNodeId((current) => (current === node.id ? null : current));
             }
         },
         [effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, startGenerationRequest, t],

@@ -11,9 +11,8 @@ import { runModelPlugin } from "./model-plugin";
 import { uploadR2Asset } from "./r2-assets";
 import type { ReferenceImage } from "@/types/image";
 
-type VideoResponse = { id?: string; task_id?: string; status?: string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; download_url?: string; content?: { video_url?: string; url?: string; download_url?: string } | null };
-type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
-type ApiEnvelope<T> = T | { code?: number | string; data?: T | null; msg?: string; message?: string; error?: { message?: string } };
+type VideoResponse = { id?: string; task_id?: string; status?: string; error?: unknown; message?: unknown; detail?: unknown; url?: string; result_url?: string; video_url?: string; download_url?: string; content?: { video_url?: string; url?: string; download_url?: string } | null };
+type ApiVideoResponse = VideoResponse | { code?: number | string; data?: unknown; msg?: string; message?: string; error?: unknown };
 type RequestOptions = { signal?: AbortSignal; referenceVideos?: ReferenceVideo[]; referenceAudios?: ReferenceAudio[] };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
@@ -26,6 +25,8 @@ export type VideoTaskPollingOptions = { intervalMs: number; maxAttempts: number 
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
 const publicAssetUrls = new Map<string, string>();
 const VIDEO_REQUEST_TIMEOUT_MS = 30_000;
+const VIDEO_COMPLETED_STATUSES = new Set(["completed", "complete", "succeeded", "success", "done", "finished"]);
+const VIDEO_FAILED_STATUSES = new Set(["failed", "failure", "error", "cancelled", "canceled", "rejected", "expired", "aborted", "timeout", "timed_out"]);
 
 function aiApiUrl(config: AiConfig, path: string) {
     return buildApiUrl(config.baseUrl, path);
@@ -182,13 +183,14 @@ async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, 
         const video = unwrapVideoResponse((await axios.get<ApiVideoResponse>(aiApiUrl(config, `/videos/${task.id}`), { headers: aiHeaders(config), signal: options?.signal, timeout: VIDEO_REQUEST_TIMEOUT_MS })).data);
         const url = videoResultUrl(video);
         if (url) return { status: "completed", result: { url, mimeType: "video/mp4" } };
-        const status = video.status?.trim().toLowerCase();
-        if (status === "completed") {
+        const status = normalizeVideoStatus(video.status);
+        if (VIDEO_COMPLETED_STATUSES.has(status)) {
             const content = await axios.get<Blob>(aiApiUrl(config, `/videos/${task.id}/content`), { headers: aiHeaders(config), responseType: "blob", signal: options?.signal, timeout: VIDEO_REQUEST_TIMEOUT_MS });
             await assertVideoBlob(content.data);
             return { status: "completed", result: { blob: content.data } };
         }
-        if (status === "failed" || status === "cancelled") return { status: "failed", error: readApiErrorMessage(video.error?.message) || apiText("videoGenerationFailed") };
+        const error = readApiErrorMessage(video.error) || readApiErrorMessage(video.message) || readApiErrorMessage(video.detail);
+        if (error || VIDEO_FAILED_STATUSES.has(status)) return { status: "failed", error: error || apiText("videoGenerationFailed") };
         return { status: "pending" };
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("videoTaskQueryFailed")));
@@ -274,17 +276,23 @@ function isPublicUrl(value: unknown): value is string {
 }
 
 function unwrapVideoResponse(payload: ApiVideoResponse) {
-    return unwrapEnvelope(payload, apiText("noVideoTask"));
+    let current: unknown = payload;
+    for (let depth = 0; depth < 3; depth += 1) {
+        if (!current || typeof current !== "object") throw new Error(apiText("noVideoTask"));
+        const record = current as Record<string, unknown>;
+        if (record.code !== undefined && record.code !== 0 && record.code !== "0") throw new Error(readApiErrorMessage(record) || apiText("requestFailed"));
+        if (isVideoResponse(record) || !("data" in record)) return record as VideoResponse;
+        current = record.data;
+    }
+    throw new Error(apiText("noVideoTask"));
 }
 
-function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
-    if (!payload) throw new Error(emptyMessage);
-    if (typeof payload === "object" && "code" in payload && payload.code !== undefined) {
-        if (payload.code !== 0 && payload.code !== "0") throw new Error(readApiErrorMessage(payload) || apiText("requestFailed"));
-        if (!payload.data) throw new Error(emptyMessage);
-        return payload.data;
-    }
-    return payload as T;
+function isVideoResponse(payload: Record<string, unknown>) {
+    return ["id", "task_id", "video_url", "result_url", "url", "download_url", "content"].some((field) => field in payload) || payload.object === "video";
+}
+
+function normalizeVideoStatus(value: unknown) {
+    return typeof value === "string" ? value.trim().toLowerCase().replace(/[\s-]+/g, "_") : "";
 }
 
 function videoResultUrl(payload: VideoResponse) {

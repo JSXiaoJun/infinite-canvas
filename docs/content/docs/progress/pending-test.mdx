@@ -5,7 +5,7 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
-- 画布视频完成态：视频任务查询返回 `completed` 且通过 `video_url`、`url`、`result_url` 或 `download_url` 提供视频时，节点应结束转圈并正常播放；远程视频下载被 CORS 拦截、响应缓慢或视频元信息迟迟不返回时，应回退使用公网 URL，不应无限停留在生成中；取消生成仍应保持取消状态。
+- 画布视频完成态：视频任务查询返回 `completed` 且通过 `video_url`、`url`、`result_url` 或 `download_url` 提供视频时，节点应结束转圈并正常播放；远程视频下载被 CORS 拦截、响应缓慢或视频元信息迟迟不返回时，应回退使用公网 URL，不应无限停留在生成中。使用生成配置连续生成多条视频时，直接响应和无 `code` 的 `data` 包装响应都应正确识别，常见失败、取消、拒绝、过期和超时终态及携带错误信息的响应应立即显示失败；快速重复点击不应创建重复任务或遗留永久加载节点，取消生成仍应保持取消状态。
 
 - 图片接口响应兼容：使用返回 `data` 数组、单个对象、字符串化 JSON，以及 `b64_json` 带 MIME 前缀或换行的 OpenAI 兼容渠道生成图片；图片应能直接写入本地存储并正常反显、下载，不应显示“全部图片生成失败”。
 
