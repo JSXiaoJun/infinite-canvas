@@ -8,6 +8,7 @@ import { type AiConfig } from "@/stores/use-config-store";
 
 const resolutionOptions = [
     { value: "720", label: "720p" },
+    { value: "768", label: "768p" },
     { value: "480", label: "480p" },
     { value: "1080", label: "1080p" },
     { value: "2k", label: "2k" },
