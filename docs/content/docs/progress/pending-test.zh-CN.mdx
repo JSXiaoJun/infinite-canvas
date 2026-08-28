@@ -5,6 +5,8 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- 生图工作台模型路由：选择名称包含服务前缀的渠道模型（例如 `[反重力] gemini-3-pro-image`）后，请求应使用该渠道的 Base URL、API Key 和完整模型名称，不得改成其他渠道的同名基础模型或删除方括号前缀；文生图、参考图生图和失败重试行为应一致。
+
 - Docker 镜像发布：推送任意分支后都应自动运行应用与文档 Docker workflow，并发布 SHA 标签镜像；推送 `main` 时还应发布 `ghcr.io/jsxiaojun/infinite-canvas:latest` 与 `ghcr.io/jsxiaojun/infinite-canvas-docs:latest`，推送版本 tag 时仍应保留版本号和 SHA 标签。
 - Sora 视频协议：任意渠道选择 Sora 后，都应使用该渠道配置的接口地址，并以 JSON 提交 `model`、`prompt`、`duration`、`aspect_ratio`、`resolution` 和 `generate_audio`，不得依赖模型白名单；创建后每 10 秒按返回的 `task_id` 或 `id` 轮询，并读取公开结果地址或兼容的 content 接口。画布引用的本地图片、视频、音频应先自动上传到专用 R2，再分别通过 `image_urls`、`reference_video`、`audio_urls` 提交，同一素材在当前会话不应重复上传；OpenAI 与 Gemini 渠道原有行为不变。
 

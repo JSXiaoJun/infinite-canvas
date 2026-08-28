@@ -197,7 +197,7 @@ export default function ImagePage() {
             saveLog(
                 buildLog({
                     prompt: text,
-                    model,
+                    model: snapshot.config.model,
                     config: { ...snapshot.config, count: String(generationCount) },
                     references: snapshot.references,
                     durationMs: performance.now() - batchStartedAt,
@@ -312,16 +312,18 @@ export default function ImagePage() {
 
     const buildRequestSnapshot = () => {
         const text = prompt.trim();
+        const currentConfig = useConfigStore.getState().config;
+        const selectedModel = currentConfig.imageModel || currentConfig.model;
         if (!text) {
             message.error(t("imageWorkbench.promptRequired"));
             return null;
         }
-        if (!isAiConfigReady(effectiveConfig, model)) {
+        if (!isAiConfigReady(currentConfig, selectedModel)) {
             message.warning(t("workbench.configFirst"));
             openConfigDialog(true);
             return null;
         }
-        return { text, config: { ...effectiveConfig, model, count: "1" }, references: [...references] };
+        return { text, config: buildImageConfig(currentConfig, selectedModel), references: [...references] };
     };
 
     const runGenerationSlot = async (index: number, snapshot: { text: string; config: AiConfig; references: ReferenceImage[] }) => {
@@ -354,7 +356,7 @@ export default function ImagePage() {
             saveLog(
                 buildLog({
                     prompt: snapshot.text,
-                    model,
+                    model: snapshot.config.model,
                     config: { ...snapshot.config, count: "1" },
                     references: snapshot.references,
                     durationMs: performance.now() - retryStartedAt,
@@ -909,4 +911,8 @@ function buildLog({
         images,
         thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
     };
+}
+
+function buildImageConfig(config: AiConfig, model: string): AiConfig {
+    return { ...config, channelMode: "local", model, imageModel: model, count: "1" };
 }

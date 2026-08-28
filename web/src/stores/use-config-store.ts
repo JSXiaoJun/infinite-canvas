@@ -339,10 +339,11 @@ export function resolveModelChannel(config: AiConfig, value: string) {
 }
 
 export function resolveModelRequestConfig(config: AiConfig, value: string) {
-    const channel = resolveModelChannel(config, value);
+    const selected = findChannelModel(config, value);
+    const channel = selected?.channel || resolveModelChannel(config, value);
     return {
         ...config,
-        model: modelOptionName(value || config.model),
+        model: selected?.model.name || modelOptionName(value || config.model),
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
         apiFormat: channel.apiFormat,
