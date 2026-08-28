@@ -56,10 +56,8 @@ export function buildNodeGenerationContext(nodeId: string, nodes: CanvasNodeData
 
 function buildComposerGenerationContext(inputs: NodeGenerationInput[], prompt: string): NodeGenerationContext {
     const inputByNodeId = new Map(inputs.map((input) => [input.nodeId, input]));
-    const selectedInputs: NodeGenerationInput[] = [];
     const labelByNodeId = new Map<string, string>();
     const textBlocks: string[] = [];
-    const counts = { image: 0, video: 0, audio: 0, text: 0 };
     let lastIndex = 0;
     let nextPrompt = "";
 
@@ -70,10 +68,9 @@ function buildComposerGenerationContext(inputs: NodeGenerationInput[], prompt: s
         if (input) {
             let label = labelByNodeId.get(input.nodeId);
             if (!label) {
-                label = generationLabel(input.type, counts[input.type]++);
+                label = generationLabel(input.type, inputs.filter((item) => item.type === input.type).indexOf(input));
                 labelByNodeId.set(input.nodeId, label);
                 if (input.type === "text") textBlocks.push(`【${label}】\n${input.text || ""}`);
-                else selectedInputs.push(input);
             }
             nextPrompt += input.type === "text" ? `【${label}】` : label;
         }
@@ -81,17 +78,22 @@ function buildComposerGenerationContext(inputs: NodeGenerationInput[], prompt: s
     }
 
     nextPrompt += prompt.slice(lastIndex);
+    const textInputs = inputs.filter((input) => input.type === "text");
+    textInputs.filter((input) => !labelByNodeId.has(input.nodeId)).forEach((input) => {
+        const label = generationLabel("text", textInputs.indexOf(input));
+        textBlocks.push(`【${label}】\n${input.text || ""}`);
+    });
     if (textBlocks.length) nextPrompt = `${nextPrompt.trim()}\n\n${textBlocks.join("\n\n")}`;
-    const referenceImages = selectedInputs.map((input) => input.image).filter((image): image is ReferenceImage => Boolean(image));
-    const referenceVideos = selectedInputs.map((input) => input.video).filter((video): video is ReferenceVideo => Boolean(video));
-    const referenceAudios = selectedInputs.map((input) => input.audio).filter((audio): audio is ReferenceAudio => Boolean(audio));
+    const referenceImages = inputs.map((input) => input.image).filter((image): image is ReferenceImage => Boolean(image));
+    const referenceVideos = inputs.map((input) => input.video).filter((video): video is ReferenceVideo => Boolean(video));
+    const referenceAudios = inputs.map((input) => input.audio).filter((audio): audio is ReferenceAudio => Boolean(audio));
 
     return {
         prompt: nextPrompt,
         referenceImages,
         referenceVideos,
         referenceAudios,
-        textCount: counts.text,
+        textCount: inputs.filter((input) => input.type === "text").length,
         imageCount: referenceImages.length,
         videoCount: referenceVideos.length,
         audioCount: referenceAudios.length,
