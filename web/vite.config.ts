@@ -41,6 +41,15 @@ function localPluginsManifest(): Plugin {
 export default defineConfig({
     base: process.env.VITE_BASE || "/",
     plugins: [react(), localPluginsManifest()],
+    server: {
+        proxy: {
+            "/__yyapi/model-capabilities": {
+                target: "https://media.yyapi.cloud",
+                changeOrigin: true,
+                rewrite: () => "/v1/model-capabilities",
+            },
+        },
+    },
     resolve: {
         alias: {
             "@": resolve(webDir, "src"),

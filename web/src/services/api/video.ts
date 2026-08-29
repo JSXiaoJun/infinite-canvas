@@ -9,6 +9,7 @@ import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, re
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import { runModelPlugin } from "./model-plugin";
 import { uploadR2Asset } from "./r2-assets";
+import { constrainVideoConfig, getVideoModelCapabilities } from "./video-capabilities";
 import type { ReferenceImage } from "@/types/image";
 
 type VideoResponse = { id?: string; task_id?: string; status?: string; error?: unknown; message?: unknown; detail?: unknown; url?: string; result_url?: string; video_url?: string; download_url?: string; content?: { video_url?: string; url?: string; download_url?: string } | null };
@@ -55,7 +56,10 @@ export async function requestVideoGeneration(config: AiConfig, prompt: string, r
 
 export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], options?: RequestOptions): Promise<VideoGenerationTask> {
     const selectedModel = (config.model || config.videoModel).trim();
-    const requestConfig = resolveModelRequestConfig(config, selectedModel);
+    const requestConfig = constrainVideoConfig(
+        resolveModelRequestConfig(config, selectedModel),
+        getVideoModelCapabilities(config, selectedModel),
+    );
     const script = resolveModelScript(config, selectedModel);
     if (script) return createPluginVideoTask(requestConfig, selectedModel, script, prompt, references, options);
     assertVideoConfig(requestConfig, requestConfig.model);
@@ -206,7 +210,7 @@ function assertVideoConfig(config: AiConfig, model: string) {
 
 function normalizeVideoSeconds(value: string) {
     const seconds = Math.floor(Number(value) || 6);
-    return String(Math.max(1, Math.min(20, seconds)));
+    return String(Math.max(1, Math.min(30, seconds)));
 }
 
 function normalizeVideoSize(value: string) {

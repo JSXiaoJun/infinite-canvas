@@ -447,6 +447,10 @@ export default {
         savedContinue: "Settings saved. Continue with your previous request.",
         channels: {
             description: "Choose a protocol for each provider, fetch its models, assign capabilities, and optionally customize request scripts.",
+            fetchYyapiCapabilities: "Fetch YYAPI video settings",
+            yyapiCapabilitiesCachedAt: "Cached: {{date}}",
+            yyapiCapabilitiesFetched: "Cached settings for {{count}} YYAPI video models",
+            yyapiCapabilitiesFailed: "Failed to fetch YYAPI video settings",
             add: "Add provider",
             unnamed: "Unnamed provider",
             numberedName: "Provider {{count}}",

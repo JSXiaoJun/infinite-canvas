@@ -24,6 +24,13 @@ export type ModelChannel = {
     models: ChannelModel[];
 };
 
+export type VideoModelCapabilityConfig = {
+    durations: number[];
+    resolutions: string[];
+};
+
+export type VideoModelCapabilitiesCache = Record<string, VideoModelCapabilityConfig>;
+
 export type AiConfig = {
     channelMode: "remote" | "local";
     baseUrl: string;
@@ -43,6 +50,8 @@ export type AiConfig = {
     vquality: string;
     videoGenerateAudio: string;
     videoWatermark: string;
+    yyapiVideoCapabilities: VideoModelCapabilitiesCache;
+    yyapiVideoCapabilitiesUpdatedAt: string;
     systemPrompt: string;
     reasoningEffort: ReasoningEffort;
     models: string[];
@@ -101,6 +110,8 @@ export const defaultConfig: AiConfig = {
     vquality: "720",
     videoGenerateAudio: "true",
     videoWatermark: "false",
+    yyapiVideoCapabilities: {},
+    yyapiVideoCapabilitiesUpdatedAt: "",
     systemPrompt: "",
     reasoningEffort: "auto",
     models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
@@ -250,6 +261,8 @@ export const useConfigStore = create<ConfigStore>()(
                         vquality: config.vquality || "720",
                         videoGenerateAudio: config.videoGenerateAudio || "true",
                         videoWatermark: config.videoWatermark || "false",
+                        yyapiVideoCapabilities: config.yyapiVideoCapabilities && typeof config.yyapiVideoCapabilities === "object" ? config.yyapiVideoCapabilities : {},
+                        yyapiVideoCapabilitiesUpdatedAt: config.yyapiVideoCapabilitiesUpdatedAt || "",
                         canvasImageCount: config.canvasImageCount || "3",
                     },
                 };

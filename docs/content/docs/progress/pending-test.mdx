@@ -5,6 +5,8 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+- YYAPI video model capabilities: configure a provider whose Base URL uses `yyapi.cloud` and assign at least one model the Video capability. The provider toolbar should show a manual Fetch YYAPI video settings button. Before clicking it, video settings should retain the standard presets; after one successful click, matching video models should show only their cached resolutions and durations, automatically replace unsupported previous values, and constrain outgoing requests. Reloading the page should keep the cached result without fetching again. Non-video models and other providers should retain the standard presets.
+
 - 生图工作台模型路由：选择名称包含服务前缀的渠道模型（例如 `[反重力] gemini-3-pro-image`）后，请求应使用该渠道的 Base URL、API Key 和完整模型名称，不得改成其他渠道的同名基础模型或删除方括号前缀；文生图、参考图生图和失败重试行为应一致。
 
 - 视频请求错误提示：视频任务创建或查询请求超过 30 秒，或接口返回 408、504、524 时，画布节点应显示“视频生成超时”，不应显示跨域错误；真正的浏览器跨域失败仍应显示跨域提示。

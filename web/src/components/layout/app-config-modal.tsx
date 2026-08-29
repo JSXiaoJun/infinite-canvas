@@ -10,6 +10,7 @@ import { ConfigPromptSources } from "@/components/layout/config-prompt-sources";
 import { ConfigLocalStorage } from "@/components/layout/config-local-storage";
 import type { AppLocale } from "@/i18n";
 import { exportAppConfig, importAppConfig } from "@/services/config-file";
+import { fetchYyapiVideoCapabilities, isYyapiBaseUrl } from "@/services/api/video-capabilities";
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@/services/app-sync";
 import { testWebdavConnection, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
@@ -53,6 +54,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const [activeTab, setActiveTab] = useState<ConfigTabKey>(initialTab);
     const [editingChannelId, setEditingChannelId] = useState("");
     const [testingWebdav, setTestingWebdav] = useState(false);
+    const [fetchingYyapiCapabilities, setFetchingYyapiCapabilities] = useState(false);
     const [syncingWebdav, setSyncingWebdav] = useState(false);
     const [webdavSyncStatus, setWebdavSyncStatus] = useState("");
     const [webdavDomainProgress, setWebdavDomainProgress] = useState(createWebdavDomainProgress);
@@ -65,6 +67,8 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const clearPromptContinue = useConfigStore((state) => state.clearPromptContinue);
     const webdavReady = Boolean(webdav.url.trim());
     const editingChannel = config.channels.find((channel) => channel.id === editingChannelId) || null;
+    const hasYyapiVideoModels = config.channels.some((channel) => isYyapiBaseUrl(channel.baseUrl) && channel.models.some((model) => model.capability === "video"));
+    const yyapiCapabilitiesCachedAt = formatYyapiCapabilitiesCachedAt(config.yyapiVideoCapabilitiesUpdatedAt);
     const locale = i18n.resolvedLanguage as AppLocale;
     useEffect(() => setActiveTab(initialTab), [initialTab]);
 
@@ -109,6 +113,20 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
 
     const saveChannel = (channel: ModelChannel) => {
         updateChannels(config.channels.map((item) => (item.id === channel.id ? channel : item)));
+    };
+
+    const fetchYyapiCapabilities = async () => {
+        setFetchingYyapiCapabilities(true);
+        try {
+            const capabilities = await fetchYyapiVideoCapabilities();
+            updateConfig("yyapiVideoCapabilities", capabilities);
+            updateConfig("yyapiVideoCapabilitiesUpdatedAt", new Date().toISOString());
+            message.success(t("config.channels.yyapiCapabilitiesFetched", { count: Object.keys(capabilities).length }));
+        } catch {
+            message.error(t("config.channels.yyapiCapabilitiesFailed"));
+        } finally {
+            setFetchingYyapiCapabilities(false);
+        }
     };
 
     const testWebdav = async () => {
@@ -186,9 +204,19 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                             <div>
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                                     <div className="text-xs text-stone-500">{t("config.channels.description")}</div>
-                                    <Button type="primary" icon={<Plus className="size-4" />} onClick={addChannel}>
-                                        {t("config.channels.add")}
-                                    </Button>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {hasYyapiVideoModels ? (
+                                            <>
+                                                {yyapiCapabilitiesCachedAt ? <span className="whitespace-nowrap text-xs text-stone-400 dark:text-stone-500">{t("config.channels.yyapiCapabilitiesCachedAt", { date: yyapiCapabilitiesCachedAt })}</span> : null}
+                                                <Button icon={<RefreshCw className="size-4" />} loading={fetchingYyapiCapabilities} onClick={() => void fetchYyapiCapabilities()}>
+                                                    {t("config.channels.fetchYyapiCapabilities")}
+                                                </Button>
+                                            </>
+                                        ) : null}
+                                        <Button type="primary" icon={<Plus className="size-4" />} onClick={addChannel}>
+                                            {t("config.channels.add")}
+                                        </Button>
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
                                     {config.channels.map((channel) => (
@@ -382,6 +410,15 @@ function pickDefaultModel(config: AiConfig, capability: ModelCapability, current
 
 function normalizeImageCount(value: string) {
     return String(Math.max(1, Math.min(15, Math.floor(Math.abs(Number(value)) || 3))));
+}
+
+function formatYyapiCapabilitiesCachedAt(value: string) {
+    const date = new Date(value);
+    if (!value || Number.isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}年-${month}月-${day}日`;
 }
 
 function apiFormatLabel(apiFormat: ApiCallFormat) {

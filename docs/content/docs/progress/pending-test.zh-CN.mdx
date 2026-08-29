@@ -5,6 +5,8 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- YYAPI 视频模型能力：配置 Base URL 属于 `yyapi.cloud` 且至少包含一个“视频”模型的渠道，渠道工具栏应显示“获取 YYAPI 视频配置”按钮；未点击前视频设置保留通用预设，成功获取一次后，匹配的视频模型应只显示缓存中的清晰度与时长，旧选择失效时自动切换为有效值，并在请求阶段限制参数。刷新页面后应继续使用持久缓存且不再自动请求；非视频模型和其他渠道仍保留通用预设。
+
 - 生图工作台模型路由：选择名称包含服务前缀的渠道模型（例如 `[反重力] gemini-3-pro-image`）后，请求应使用该渠道的 Base URL、API Key 和完整模型名称，不得改成其他渠道的同名基础模型或删除方括号前缀；文生图、参考图生图和失败重试行为应一致。
 
 - Docker 镜像发布：推送任意分支后都应自动运行应用与文档 Docker workflow，并发布 SHA 标签镜像；推送 `main` 时还应发布 `ghcr.io/jsxiaojun/infinite-canvas:latest` 与 `ghcr.io/jsxiaojun/infinite-canvas-docs:latest`，推送版本 tag 时仍应保留版本号和 SHA 标签。

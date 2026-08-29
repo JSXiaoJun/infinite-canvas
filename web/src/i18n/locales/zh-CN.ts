@@ -447,6 +447,10 @@ export default {
         savedContinue: "配置已保存，请继续刚才的请求",
         channels: {
             description: "每个渠道选择一个协议并拉取模型，为每个模型指定能力（生图/视频/文本/音频），并可自定义调用脚本。",
+            fetchYyapiCapabilities: "获取 YYAPI 视频配置",
+            yyapiCapabilitiesCachedAt: "缓存时间：{{date}}",
+            yyapiCapabilitiesFetched: "已缓存 {{count}} 个 YYAPI 视频模型配置",
+            yyapiCapabilitiesFailed: "YYAPI 视频配置获取失败",
             add: "新增渠道",
             unnamed: "未命名渠道",
             numberedName: "渠道 {{count}}",

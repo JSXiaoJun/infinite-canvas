@@ -1,9 +1,10 @@
-import { type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
 import { type CanvasTheme } from "@/lib/canvas-theme";
+import { getVideoModelCapabilities } from "@/services/api/video-capabilities";
 import { type AiConfig } from "@/stores/use-config-store";
 
 const resolutionOptions = [
@@ -32,18 +33,37 @@ export const videoSecondOptions = secondOptions.map((value) => String(value));
 
 type VideoSettingsPanelProps = {
     config: AiConfig;
+    model?: string;
     onConfigChange: (key: "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark", value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
 };
 
-export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
+export function VideoSettingsPanel({ config, model, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
     const { t } = useTranslation();
     const seconds = config.videoSeconds || "6";
     const size = normalizeVideoSizeValue(config.size);
     const dimensions = readSizeDimensions(size);
     const resolution = normalizeVideoResolutionValue(config.vquality);
+    const capabilities = getVideoModelCapabilities(config, model);
+    const availableResolutions = useMemo(
+        () => capabilities?.resolutions.map(toResolutionOption).filter((item, index, items) => items.findIndex((candidate) => candidate.value === item.value) === index) || resolutionOptions,
+        [capabilities],
+    );
+    const availableSeconds = capabilities?.durations.length ? capabilities.durations : secondOptions;
+    const usesDynamicResolutions = Boolean(capabilities?.resolutions.length);
+    const usesDynamicSeconds = Boolean(capabilities?.durations.length);
+
+    useEffect(() => {
+        if (usesDynamicResolutions && !availableResolutions.some((item) => item.value === resolution)) {
+            onConfigChange("vquality", availableResolutions[0].value);
+        }
+        if (usesDynamicSeconds && !availableSeconds.some((value) => String(value) === seconds)) {
+            onConfigChange("videoSeconds", String(availableSeconds[0]));
+        }
+    }, [availableResolutions, availableSeconds, onConfigChange, resolution, seconds, usesDynamicResolutions, usesDynamicSeconds]);
+
     const updateDimension = (key: "width" | "height", value: number | null) => {
         const next = Math.max(1, Math.floor(value || dimensions[key] || 720));
         onConfigChange("size", `${key === "width" ? next : dimensions.width}x${key === "height" ? next : dimensions.height}`);
@@ -55,12 +75,12 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 {showTitle ? <div className="text-lg font-semibold">{t("settingsPanels.video.title")}</div> : null}
                 <SettingGroup title={t("settingsPanels.video.quality")} color={theme.node.muted}>
                     <div className="grid grid-cols-3 gap-2.5">
-                        {resolutionOptions.map((item) => (
+                        {availableResolutions.map((item) => (
                             <OptionPill key={item.value} selected={resolution === item.value} theme={theme} onClick={() => onConfigChange("vquality", item.value)}>
                                 {item.label}
                             </OptionPill>
                         ))}
-                        <ResolutionInput value={resolution} theme={theme} onChange={(value) => onConfigChange("vquality", value)} />
+                        {usesDynamicResolutions ? null : <ResolutionInput value={resolution} theme={theme} onChange={(value) => onConfigChange("vquality", value)} />}
                     </div>
                 </SettingGroup>
                 <SettingGroup title={t("settingsPanels.video.size")} color={theme.node.muted}>
@@ -92,12 +112,12 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 </SettingGroup>
                 <SettingGroup title={t("settingsPanels.video.seconds")} color={theme.node.muted}>
                     <div className="grid grid-cols-3 gap-2.5">
-                        {secondOptions.map((value) => (
+                        {availableSeconds.map((value) => (
                             <OptionPill key={value} selected={seconds === String(value)} theme={theme} onClick={() => onConfigChange("videoSeconds", String(value))}>
                                 {value}s
                             </OptionPill>
                         ))}
-                        <NumberInput value={seconds} min={1} max={30} theme={theme} onChange={(value) => onConfigChange("videoSeconds", value)} />
+                        {usesDynamicSeconds ? null : <NumberInput value={seconds} min={1} max={30} theme={theme} onChange={(value) => onConfigChange("videoSeconds", value)} />}
                     </div>
                 </SettingGroup>
             </div>
@@ -132,6 +152,11 @@ export function normalizeVideoResolutionValue(value: string) {
     if (value === "480p" || value === "low") return "480";
     if (value === "720p" || value === "auto" || value === "high" || value === "medium") return "720";
     return value.replace(/p$/i, "") || "720";
+}
+
+function toResolutionOption(value: string) {
+    const normalized = normalizeVideoResolutionValue(value);
+    return { value: normalized, label: /^\d+k$/i.test(normalized) ? normalized : `${normalized}p` };
 }
 
 function OptionPill({ selected, disabled = false, theme, onClick, children }: { selected: boolean; disabled?: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
