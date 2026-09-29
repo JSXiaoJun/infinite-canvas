@@ -53,6 +53,10 @@ export type AiConfig = {
     yyapiVideoCapabilities: VideoModelCapabilitiesCache;
     yyapiVideoCapabilitiesUpdatedAt: string;
     systemPrompt: string;
+    /** User override for the image reverse-prompt task text; empty means use the built-in localized preset. */
+    reverseImagePrompt: string;
+    /** User override for the video reverse-prompt task text; empty means use the built-in localized preset. */
+    reverseVideoPrompt: string;
     reasoningEffort: ReasoningEffort;
     models: string[];
     quality: string;
@@ -113,6 +117,8 @@ export const defaultConfig: AiConfig = {
     yyapiVideoCapabilities: {},
     yyapiVideoCapabilitiesUpdatedAt: "",
     systemPrompt: "",
+    reverseImagePrompt: "",
+    reverseVideoPrompt: "",
     reasoningEffort: "auto",
     models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
     quality: "auto",
@@ -270,6 +276,16 @@ export const useConfigStore = create<ConfigStore>()(
         },
     ),
 );
+
+/** Task text used when creating reverse-prompt nodes: the user's override if set, otherwise the localized built-in preset. */
+export function resolveReversePrompt(config: Pick<AiConfig, "reverseImagePrompt" | "reverseVideoPrompt">, kind: "image" | "video") {
+    const custom = kind === "video" ? config.reverseVideoPrompt : config.reverseImagePrompt;
+    return custom?.trim() ? custom : defaultReversePrompt(kind);
+}
+
+export function defaultReversePrompt(kind: "image" | "video") {
+    return i18n.t(kind === "video" ? "canvas.projectPage.reverseVideoPreset" : "canvas.projectPage.reversePreset");
+}
 
 export function useEffectiveConfig() {
     const config = useConfigStore((state) => state.config);

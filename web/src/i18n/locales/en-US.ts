@@ -482,6 +482,10 @@ export default {
             audioInstructionsPlaceholder: "For example: natural, warm, and suitable for narration.",
             systemPrompt: "System prompt",
             systemPromptPlaceholder: "For example: You are a visual director specializing in cinematic, photorealistic imagery.",
+            reverseImagePrompt: "Default image reverse prompt",
+            reverseVideoPrompt: "Default video reverse prompt",
+            reversePromptDescription: "Used as the task text node created by the node toolbar's Reverse prompt action.",
+            resetReversePrompt: "Reset to default",
         },
         channelEditor: {
             title: "Edit provider",

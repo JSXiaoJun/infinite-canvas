@@ -482,6 +482,10 @@ export default {
             audioInstructionsPlaceholder: "例如：自然、温暖、适合旁白。",
             systemPrompt: "系统提示词",
             systemPromptPlaceholder: "例如：你是一位擅长电影感写实摄影的视觉导演。",
+            reverseImagePrompt: "图片反推默认提示词",
+            reverseVideoPrompt: "视频反推默认提示词",
+            reversePromptDescription: "点击节点工具栏「反推提示词」时，自动创建的任务说明文本节点会使用这段内容。",
+            resetReversePrompt: "恢复默认",
         },
         channelEditor: {
             title: "编辑渠道",

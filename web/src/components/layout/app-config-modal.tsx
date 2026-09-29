@@ -14,7 +14,7 @@ import { fetchYyapiVideoCapabilities, isYyapiBaseUrl } from "@/services/api/vide
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@/services/app-sync";
 import { testWebdavConnection, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
-import { apiFormatLabel, createModelChannel, modelOptionsFromChannels, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore, type AiConfig, type ApiCallFormat, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
+import { apiFormatLabel, createModelChannel, defaultReversePrompt, modelOptionsFromChannels, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore, type AiConfig, type ApiCallFormat, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
 
 type ModelGroup = {
     capability: ModelCapability;
@@ -285,9 +285,13 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                 <Form.Item label={t("config.preferences.audioInstructions")} className="mb-4">
                                     <Input.TextArea rows={2} value={config.audioInstructions} placeholder={t("config.preferences.audioInstructionsPlaceholder")} onChange={(event) => updateConfig("audioInstructions", event.target.value)} />
                                 </Form.Item>
-                                <Form.Item label={t("config.preferences.systemPrompt")} className="mb-0">
+                                <Form.Item label={t("config.preferences.systemPrompt")} className="mb-4">
                                     <Input.TextArea rows={4} value={config.systemPrompt} placeholder={t("config.preferences.systemPromptPlaceholder")} onChange={(event) => updateConfig("systemPrompt", event.target.value)} />
                                 </Form.Item>
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <ReversePromptField label={t("config.preferences.reverseImagePrompt")} value={config.reverseImagePrompt} fallback={defaultReversePrompt("image")} onChange={(value) => updateConfig("reverseImagePrompt", value)} />
+                                    <ReversePromptField label={t("config.preferences.reverseVideoPrompt")} value={config.reverseVideoPrompt} fallback={defaultReversePrompt("video")} onChange={(value) => updateConfig("reverseVideoPrompt", value)} />
+                                </div>
                             </Form>
                         ),
                     },
@@ -406,6 +410,44 @@ function pickDefaultModel(config: AiConfig, capability: ModelCapability, current
     const options = selectableModelsByCapability(config, capability);
     const normalized = normalizeModelOptionValue(current, config.channels);
     return options.includes(normalized) ? normalized : options[0] || "";
+}
+
+/**
+ * Editable reverse-prompt template. An empty stored value means "use the built-in preset", so the default
+ * keeps following the UI language. The textarea keeps its own draft so clearing it while typing does not
+ * snap back to the default; an empty draft is restored to the default on blur.
+ */
+function ReversePromptField({ label, value, fallback, onChange }: { label: string; value: string; fallback: string; onChange: (value: string) => void }) {
+    const { t } = useTranslation();
+    const resolved = value.trim() ? value : fallback;
+    const [draft, setDraft] = useState(resolved);
+
+    // Sync when the stored value changes externally (config import, reset) or the language switches the fallback.
+    useEffect(() => {
+        setDraft((current) => (current === resolved || (!current.trim() && !value.trim()) ? current : resolved));
+    }, [resolved, value]);
+
+    const handleChange = (next: string) => {
+        setDraft(next);
+        onChange(next === fallback ? "" : next);
+    };
+
+    return (
+        <Form.Item
+            label={
+                <span className="flex w-full items-center justify-between gap-2">
+                    <span>{label}</span>
+                    <Button type="link" size="small" className="px-0" disabled={!value.trim()} onClick={() => handleChange(fallback)}>
+                        {t("config.preferences.resetReversePrompt")}
+                    </Button>
+                </span>
+            }
+            extra={t("config.preferences.reversePromptDescription")}
+            className="mb-0 [&_.ant-form-item-label>label]:w-full"
+        >
+            <Input.TextArea aria-label={label} autoSize={{ minRows: 5, maxRows: 12 }} value={draft} onChange={(event) => handleChange(event.target.value)} onBlur={() => !draft.trim() && setDraft(fallback)} />
+        </Form.Item>
+    );
 }
 
 function normalizeImageCount(value: string) {
