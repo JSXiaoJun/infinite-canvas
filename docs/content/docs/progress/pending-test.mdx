@@ -5,6 +5,12 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+- Video reverse prompt: hovering a video node with content should show a Reverse prompt toolbar action that creates a preset text node and a text-mode config node, both connected. With a Gemini-protocol text model, videos up to 12MB should be sent inline as the original video; larger videos, other protocols, and models with a request script should fall back to 4 sampled frames, with no frame nodes added to the canvas. Remote videos that cannot be read cross-origin should show a prompt to download and re-upload.
+
+- Provider protocol/capability checks: in a Sora-protocol provider, Image, Text, or Audio models should show a yellow warning icon on the model row plus a summary alert; in a Gemini-protocol provider, Video or Audio models should show a red alert. Models with a request script should not warn, and saving should never be blocked. A failed image request on a Sora provider should append a protocol hint suggesting the Gemini protocol.
+
+- 画布视频删除竞态：视频生成进行中删除视频节点、删除其生成源节点或清空画布后，前端请求应被取消且结果不应回写，不应再次创建视频；删除与 Agent 待执行 `run_generation` 同时发生时，已不存在的目标节点不应触发生成。
+
 - YYAPI video model capabilities: configure a provider whose Base URL uses `yyapi.cloud` and assign at least one model the Video capability. The provider toolbar should show a manual Fetch YYAPI video settings button. Before clicking it, video settings should retain the standard presets; after one successful click, matching video models should show only their cached resolutions and durations, automatically replace unsupported previous values, and constrain outgoing requests. Reloading the page should keep the cached result without fetching again. Non-video models and other providers should retain the standard presets.
 
 - 生图工作台模型路由：选择名称包含服务前缀的渠道模型（例如 `[反重力] gemini-3-pro-image`）后，请求应使用该渠道的 Base URL、API Key 和完整模型名称，不得改成其他渠道的同名基础模型或删除方括号前缀；文生图、参考图生图和失败重试行为应一致。

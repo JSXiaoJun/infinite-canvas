@@ -64,8 +64,9 @@ export function useAgentBridge(params: AgentBridgeParams) {
                 queueMicrotask(() =>
                     generationOps.forEach((op) => {
                         const target = nodesRef.current.find((node) => node.id === op.nodeId);
-                        const prompt = op.prompt?.trim() ? op.prompt : (target?.metadata?.composerContent ?? target?.metadata?.prompt ?? "");
-                        void generateNodeRef.current?.(op.nodeId, op.mode || target?.metadata?.generationMode || "image", prompt);
+                        if (!target) return;
+                        const prompt = op.prompt?.trim() ? op.prompt : (target.metadata?.composerContent ?? target.metadata?.prompt ?? "");
+                        void generateNodeRef.current?.(op.nodeId, op.mode || target.metadata?.generationMode || "image", prompt);
                     }),
                 );
             }

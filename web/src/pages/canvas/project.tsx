@@ -282,6 +282,19 @@ function InfiniteCanvasPage() {
         if (request?.controller === controller) generationRequestsRef.current.delete(targetNodeId);
     }, []);
 
+    const cancelGenerationRequests = useCallback((nodeIds?: Set<string>) => {
+        const runningNodeIds = new Set<string>();
+        generationRequestsRef.current.forEach((request, targetNodeId) => {
+            if (nodeIds && !nodeIds.has(targetNodeId) && !nodeIds.has(request.originNodeId)) return;
+            request.controller.abort();
+            generationRequestsRef.current.delete(targetNodeId);
+            runningNodeIds.add(request.runningNodeId);
+            runningNodeIds.add(targetNodeId);
+            runningNodeIds.add(request.originNodeId);
+        });
+        return runningNodeIds;
+    }, []);
+
     const stopGenerationByRunningId = useCallback((runningId: string) => {
         const affectedNodeIds = new Set<string>();
         generationRequestsRef.current.forEach((request) => {
@@ -697,12 +710,14 @@ function InfiniteCanvasPage() {
     const deleteNodes = useCallback(
         (ids: Set<string>) => {
             if (!ids.size) return;
+            const canceledGenerationNodeIds = cancelGenerationRequests(ids);
             const allIds = new Set(ids);
             setNodes((prev) => {
                 const next = prev.filter((node) => !allIds.has(node.id));
                 return next.map((node) => {
                     const groupId = node.metadata?.groupId;
                     if (groupId && allIds.has(groupId)) return { ...node, metadata: { ...node.metadata, groupId: undefined } };
+                    if (canceledGenerationNodeIds.has(node.id) && node.metadata?.status === NODE_STATUS_LOADING) return { ...node, metadata: { ...node.metadata, status: NODE_STATUS_IDLE, errorDetails: undefined } };
                     return node;
                 });
             });
@@ -717,12 +732,12 @@ function InfiniteCanvasPage() {
             setMaskEditNodeId((current) => (current && allIds.has(current) ? null : current));
             setAngleNodeId((current) => (current && allIds.has(current) ? null : current));
             setPreviewNodeId((current) => (current && allIds.has(current) ? null : current));
-            setRunningNodeId((current) => (current && allIds.has(current) ? null : current));
+            setRunningNodeId((current) => (current && (allIds.has(current) || canceledGenerationNodeIds.has(current)) ? null : current));
             setExpandedImageNodeIds((current) => new Set([...current].filter((nodeId) => !allIds.has(nodeId))));
             setContextMenu((current) => (current?.type === "node" && allIds.has(current.nodeId) ? null : current));
             cleanupCanvasFiles({ projectId, nodes: nodesRef.current.filter((node) => !allIds.has(node.id)), chatSessions });
         },
-        [chatSessions, cleanupCanvasFiles, projectId],
+        [cancelGenerationRequests, chatSessions, cleanupCanvasFiles, projectId],
     );
 
     const deleteConnection = useCallback((connectionId: string) => {
@@ -743,6 +758,7 @@ function InfiniteCanvasPage() {
     }, [cancelPendingConnectionCreate]);
 
     const clearCanvas = useCallback(() => {
+        cancelGenerationRequests();
         setNodes([]);
         setConnections([]);
         setInfoNodeId(null);
@@ -754,7 +770,7 @@ function InfiniteCanvasPage() {
         deselectCanvas();
         setClearConfirmOpen(false);
         cleanupCanvasFiles({ projectId, nodes: [], chatSessions: [] });
-    }, [cleanupCanvasFiles, deselectCanvas, projectId]);
+    }, [cancelGenerationRequests, cleanupCanvasFiles, deselectCanvas, projectId]);
 
     const duplicateNode = useCallback((nodeId: string) => {
         const source = nodesRef.current.find((node) => node.id === nodeId);
@@ -776,36 +792,31 @@ function InfiniteCanvasPage() {
 
     const clearNodeResult = useCallback(
         (nodeId: string) => {
-            let runningNodeId: string | null = null;
-            generationRequestsRef.current.forEach((request, targetNodeId) => {
-                if (targetNodeId !== nodeId && request.originNodeId !== nodeId) return;
-                request.controller.abort();
-                generationRequestsRef.current.delete(targetNodeId);
-                runningNodeId = request.runningNodeId;
+            const canceledGenerationNodeIds = cancelGenerationRequests(new Set([nodeId]));
+            const nextNodes = nodesRef.current.map((node) => {
+                if (node.id === nodeId) {
+                    return {
+                        ...node,
+                        metadata: {
+                            ...node.metadata,
+                            content: "",
+                            status: NODE_STATUS_IDLE,
+                            errorDetails: undefined,
+                            images: undefined,
+                            primaryImageId: undefined,
+                            storageKey: undefined,
+                            naturalWidth: undefined,
+                            naturalHeight: undefined,
+                            bytes: undefined,
+                            mimeType: undefined,
+                            durationMs: undefined,
+                        },
+                    };
+                }
+                return canceledGenerationNodeIds.has(node.id) && node.metadata?.status === NODE_STATUS_LOADING ? { ...node, metadata: { ...node.metadata, status: NODE_STATUS_IDLE, errorDetails: undefined } } : node;
             });
-            const nextNodes = nodesRef.current.map((node) =>
-                node.id === nodeId
-                    ? {
-                          ...node,
-                          metadata: {
-                              ...node.metadata,
-                              content: "",
-                              status: NODE_STATUS_IDLE,
-                              errorDetails: undefined,
-                              images: undefined,
-                              primaryImageId: undefined,
-                              storageKey: undefined,
-                              naturalWidth: undefined,
-                              naturalHeight: undefined,
-                              bytes: undefined,
-                              mimeType: undefined,
-                              durationMs: undefined,
-                          },
-                      }
-                    : node,
-            );
             setNodes(nextNodes);
-            setRunningNodeId((current) => (current === nodeId || current === runningNodeId ? null : current));
+            setRunningNodeId((current) => (current === nodeId || (current ? canceledGenerationNodeIds.has(current) : false) ? null : current));
             setExpandedImageNodeIds((current) => new Set([...current].filter((id) => id !== nodeId)));
             setCropNodeId((current) => (current === nodeId ? null : current));
             setMaskEditNodeId((current) => (current === nodeId ? null : current));
@@ -813,7 +824,7 @@ function InfiniteCanvasPage() {
             setPreviewNodeId((current) => (current === nodeId ? null : current));
             cleanupCanvasFiles({ projectId, nodes: nextNodes, chatSessions });
         },
-        [chatSessions, cleanupCanvasFiles, projectId],
+        [cancelGenerationRequests, chatSessions, cleanupCanvasFiles, projectId],
     );
 
     const copySelectedNodes = useCallback(() => {
@@ -1622,19 +1633,21 @@ function InfiniteCanvasPage() {
         [addAsset, message, t],
     );
 
-    const createImageReversePromptNodes = useCallback(
+    const createReversePromptNodes = useCallback(
         (node: CanvasNodeData) => {
-            if (node.type !== CanvasNodeType.Image || !node.metadata?.content) {
-                message.warning(t("canvas.projectPage.emptyReverse"));
+            const isVideo = node.type === CanvasNodeType.Video;
+            if ((node.type !== CanvasNodeType.Image && !isVideo) || !node.metadata?.content) {
+                message.warning(t(isVideo ? "canvas.projectPage.emptyReverseVideo" : "canvas.projectPage.emptyReverse"));
                 return;
             }
+            const preset = t(isVideo ? "canvas.projectPage.reverseVideoPreset" : "canvas.projectPage.reversePreset");
 
             const gap = 96;
             const textSpec = NODE_DEFAULT_SIZE[CanvasNodeType.Text];
             const configSpec = NODE_DEFAULT_SIZE[CanvasNodeType.Config];
             const centerY = node.position.y + node.height / 2;
             const textNode = {
-                ...createCanvasNode(CanvasNodeType.Text, { x: node.position.x + node.width + gap + textSpec.width / 2, y: centerY }, { content: t("canvas.projectPage.reversePreset"), prompt: t("canvas.projectPage.reversePreset"), status: NODE_STATUS_SUCCESS, fontSize: 14 }),
+                ...createCanvasNode(CanvasNodeType.Text, { x: node.position.x + node.width + gap + textSpec.width / 2, y: centerY }, { content: preset, prompt: preset, status: NODE_STATUS_SUCCESS, fontSize: 14 }),
                 title: t("canvas.projectPage.reverseTitle"),
             };
             const configNode = {
@@ -1645,7 +1658,7 @@ function InfiniteCanvasPage() {
                         generationMode: "text",
                         model: effectiveConfig.textModel || effectiveConfig.model || defaultConfig.textModel,
                         count: 1,
-                        composerContent: t("canvas.reverseComposer", { imageId: node.id, textId: textNode.id }),
+                        composerContent: isVideo ? t("canvas.reverseVideoComposer", { videoId: node.id, textId: textNode.id }) : t("canvas.reverseComposer", { imageId: node.id, textId: textNode.id }),
                     },
                 ),
                 title: t("canvas.projectPage.reverseConfigTitle"),
@@ -2970,7 +2983,7 @@ function InfiniteCanvasPage() {
                     onSuperResolve={(node) => setSuperResolveNodeId(node.id)}
                     onAngle={(node) => setAngleNodeId(node.id)}
                     onViewImage={handleNodeViewImage}
-                    onReversePrompt={createImageReversePromptNodes}
+                    onReversePrompt={createReversePromptNodes}
                     onRetry={(node) => void handleRetryNode(node)}
                     onToggleFreeResize={(node) => toggleNodeFreeResize(node.id)}
                     onDelete={(node) => deleteNodes(new Set([node.id]))}

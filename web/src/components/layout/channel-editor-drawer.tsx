@@ -1,9 +1,20 @@
-import { Button, Drawer, Input, Segmented, Select, Space } from "antd";
-import { ListPlus, Trash2 } from "lucide-react";
+import { Alert, Button, Drawer, Input, Segmented, Select, Space, Tooltip } from "antd";
+import { ListPlus, TriangleAlert, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { defaultBaseUrlForApiFormat, guessCapability, normalizeChannelModels, type ApiCallFormat, type ChannelModel, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
+import {
+    apiFormatLabel,
+    capabilitySupport,
+    channelCapabilityWarnings,
+    defaultBaseUrlForApiFormat,
+    guessCapability,
+    normalizeChannelModels,
+    type ApiCallFormat,
+    type ChannelModel,
+    type ModelCapability,
+    type ModelChannel,
+} from "@/stores/use-config-store";
 import { ModelScriptEditor } from "./model-script-editor";
 import { ModelSelectModal } from "./model-select-modal";
 
@@ -48,6 +59,15 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
         onClose();
     };
 
+    const warnings = channelCapabilityWarnings(draft);
+    const unsupported = warnings.filter((warning) => warning.support === "unsupported");
+    const formatName = apiFormatLabel(draft.apiFormat);
+    const capabilityName = (capability: ModelCapability) => t(`config.channelEditor.capabilities.${capability}`);
+    const warningText = (capability: ModelCapability) =>
+        capabilitySupport(draft.apiFormat, capability) === "unsupported"
+            ? t("config.channelEditor.capabilityUnsupported", { format: formatName, capability: capabilityName(capability) })
+            : t("config.channelEditor.capabilityFallback", { format: formatName, capability: capabilityName(capability) });
+
     return (
         <Drawer
             open={open}
@@ -83,6 +103,26 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                 </label>
             </div>
 
+            {warnings.length ? (
+                <Alert
+                    className="mt-4"
+                    type={unsupported.length ? "error" : "warning"}
+                    showIcon
+                    message={t("config.channelEditor.mismatchTitle", { format: formatName, count: warnings.length })}
+                    description={
+                        <div className="space-y-1 text-xs">
+                            {warnings.map((warning) => (
+                                <div key={`${warning.model}-${warning.capability}`}>
+                                    <span className="font-medium">{warning.model}</span>
+                                    <span className="mx-1">·</span>
+                                    <span>{warningText(warning.capability)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    }
+                />
+            ) : null}
+
             <div className="mt-6 mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <div className="text-sm font-semibold">{t("config.channelEditor.models")}</div>
@@ -97,8 +137,18 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                 {draft.models.length ? (
                     draft.models.map((model) => (
                         <div key={model.name} className="flex flex-wrap items-center gap-3 rounded-md px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-stone-900/40">
-                            <span className="min-w-0 flex-1 truncate text-sm" title={model.name}>
-                                {model.name}
+                            <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
+                                <span className="min-w-0 truncate" title={model.name}>
+                                    {model.name}
+                                </span>
+                                {!model.script?.trim() && capabilitySupport(draft.apiFormat, model.capability) !== "native" ? (
+                                    <Tooltip title={warningText(model.capability)}>
+                                        <TriangleAlert
+                                            className={`size-3.5 shrink-0 ${capabilitySupport(draft.apiFormat, model.capability) === "unsupported" ? "text-red-500" : "text-amber-500"}`}
+                                            aria-label={warningText(model.capability)}
+                                        />
+                                    </Tooltip>
+                                ) : null}
                             </span>
                             <div className="flex shrink-0 items-center gap-2">
                                 <Segmented size="small" value={model.capability} options={capabilityOptions} onChange={(value) => setCapability(model.name, value as ModelCapability)} />

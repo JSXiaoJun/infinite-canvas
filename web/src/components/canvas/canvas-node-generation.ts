@@ -115,14 +115,19 @@ export function buildNodeGenerationInputs(nodeId: string, nodes: CanvasNodeData[
 }
 
 export function buildNodeResponseMessages(context: NodeGenerationContext): AiTextMessage[] {
-    if (!context.referenceImages.length) {
+    if (!context.referenceImages.length && !context.referenceVideos.length) {
         return [{ role: "user", content: context.prompt }];
     }
 
     return [
         {
             role: "user",
-            content: [{ type: "text" as const, text: context.prompt }, ...context.referenceImages.map((image) => ({ type: "image_url" as const, image_url: { url: image.dataUrl } }))],
+            content: [
+                { type: "text" as const, text: context.prompt },
+                ...context.referenceImages.map((image) => ({ type: "image_url" as const, image_url: { url: image.dataUrl } })),
+                // Resolved per protocol in requestImageQuestion: Gemini gets the video inline, others get sampled frames.
+                ...context.referenceVideos.map((video) => ({ type: "video_url" as const, video_url: { url: video.url, storageKey: video.storageKey, mimeType: video.type } })),
+            ],
         },
     ];
 }

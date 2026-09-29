@@ -1,20 +1,33 @@
 import axios from "axios";
 
 import i18n from "@/i18n";
-import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
+import { apiFormatLabel, buildApiUrl, capabilitySupport, resolveModelRequestConfig, resolveModelScript, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 import { normalizePluginImages, runModelPlugin } from "./model-plugin";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
+import { extractVideoFrames, readVideoBlob, VIDEO_FRAME_COUNT } from "@/lib/video-frames";
 import type { ReferenceImage } from "@/types/image";
 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
+export type AiVideoUrlPart = { type: "video_url"; video_url: { url: string; storageKey?: string; mimeType?: string } };
+type AiTextPart = { type: "text"; text: string };
+type AiImagePart = { type: "image_url"; image_url: { url: string } };
+
 export type AiTextMessage = {
     role: "system" | "user" | "assistant";
-    content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+    /** video_url parts are resolved per protocol in requestImageQuestion before anything is sent. */
+    content: string | Array<AiTextPart | AiImagePart | AiVideoUrlPart>;
 };
+
+/**
+ * Messages after video parts have been resolved: only text and images reach the wire formats.
+ * For Gemini an inlined video travels as a data:video/... URL in an image_url part;
+ * toGeminiImagePart turns any data URL into inlineData with its real mime type.
+ */
+type ResolvedTextMessage = { role: AiTextMessage["role"]; content: string | Array<AiTextPart | AiImagePart> };
 
 type ResponseToolCall = {
     id: string;
@@ -24,7 +37,7 @@ type ResponseToolCall = {
 };
 
 type ResponseInputMessage =
-    | AiTextMessage
+    | ResolvedTextMessage
     | { type: "function_call"; call_id: string; name: string; arguments: string; thoughtSignature?: string }
     | { role: "tool"; tool_call_id: string; content: string };
 
@@ -44,7 +57,7 @@ type ToolResponseResult = {
 };
 
 type ToolChoice = "auto" | "required" | { type: "function"; name: string };
-type ResponseMessageContent = AiTextMessage["content"] | string;
+type ResponseMessageContent = ResolvedTextMessage["content"] | string;
 type ResponseInputContent = { type: "input_text"; text: string } | { type: "input_image"; image_url: string };
 type ResponseInputItem =
     | { role: "system" | "user" | "assistant"; content: string | ResponseInputContent[] }
@@ -355,6 +368,16 @@ function readAxiosError(error: unknown, fallback: string) {
     }
     if (error instanceof DOMException && error.name === "AbortError") return apiText("requestCanceled");
     return error instanceof Error ? readApiErrorMessage(error.message) || error.message : fallback;
+}
+
+/**
+ * Image requests on a channel whose protocol has no native image path are sent over the
+ * OpenAI-compatible /images endpoints. When that fails, the upstream error alone ("only imagen
+ * models are supported") gives no clue that the protocol is the cause, so name it explicitly.
+ */
+function withImageFormatHint(config: Pick<AiConfig, "apiFormat">, message: string) {
+    if (capabilitySupport(config.apiFormat, "image") === "native") return message;
+    return `${message}${apiText("imageFormatFallbackHint", { format: apiFormatLabel(config.apiFormat) })}`;
 }
 
 function readStatusError(status: number | undefined, fallback: string) {
@@ -806,7 +829,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
         const images = parseImagePayload(response.data);
         return images;
     } catch (error) {
-        throw new Error(readAxiosError(error, apiText("requestFailed")));
+        throw new Error(withImageFormatHint(requestConfig, readAxiosError(error, apiText("requestFailed"))));
     }
 }
 
@@ -871,13 +894,76 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         const images = parseImagePayload(response.data);
         return images;
     } catch (error) {
-        throw new Error(readAxiosError(error, apiText("requestFailed")));
+        throw new Error(withImageFormatHint(requestConfig, readAxiosError(error, apiText("requestFailed"))));
     }
 }
 
-export async function requestImageQuestion(config: AiConfig, messages: AiTextMessage[], onDelta: (text: string) => void, options?: RequestOptions) {
+/** Raw video size cap for Gemini inlineData. Base64 adds ~33%, and the request limit is 20MB. */
+const GEMINI_INLINE_VIDEO_MAX_BYTES = 12 * 1024 * 1024;
+
+export type VideoDelivery = "inline" | "frames";
+
+/** Gemini reads video natively when the file fits inline; every other protocol (and custom scripts) gets still frames. */
+export function chooseVideoDelivery(apiFormat: AiConfig["apiFormat"], hasScript: boolean, bytes: number): VideoDelivery {
+    if (hasScript || apiFormat !== "gemini") return "frames";
+    return bytes > 0 && bytes <= GEMINI_INLINE_VIDEO_MAX_BYTES ? "inline" : "frames";
+}
+
+function blobToDataUrl(blob: Blob, mimeType: string) {
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = String(reader.result || "");
+            // Blobs from fetch/IndexedDB can have an empty or generic type; Gemini needs the real video mime.
+            resolve(result.replace(/^data:[^;,]*/, `data:${blob.type.startsWith("video/") ? blob.type : mimeType}`));
+        };
+        reader.onerror = () => reject(reader.error || new Error("read failed"));
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function resolveVideoPart(part: AiVideoUrlPart, delivery: (bytes: number) => VideoDelivery, signal?: AbortSignal): Promise<Array<AiTextPart | AiImagePart>> {
+    let blob: Blob;
+    try {
+        blob = await readVideoBlob({ url: part.video_url.url, storageKey: part.video_url.storageKey }, signal);
+    } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") throw error;
+        throw new Error(apiText("videoReadFailed"));
+    }
+    const mimeType = part.video_url.mimeType || "video/mp4";
+    if (delivery(blob.size) === "inline") {
+        return [{ type: "image_url", image_url: { url: await blobToDataUrl(blob, mimeType) } }];
+    }
+    let frames;
+    try {
+        frames = await extractVideoFrames(blob, VIDEO_FRAME_COUNT, signal);
+    } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") throw error;
+        throw new Error(apiText("videoFramesFailed"));
+    }
+    const times = frames.map((frame) => `${frame.timeSec.toFixed(1)}s`).join(", ");
+    return [{ type: "text", text: apiText("videoFramesNotice", { count: frames.length, times }) }, ...frames.map((frame) => ({ type: "image_url" as const, image_url: { url: frame.dataUrl } }))];
+}
+
+async function resolveVideoMessages(messages: AiTextMessage[], delivery: (bytes: number) => VideoDelivery, signal?: AbortSignal): Promise<ResolvedTextMessage[]> {
+    return Promise.all(
+        messages.map(async (message): Promise<ResolvedTextMessage> => {
+            if (!Array.isArray(message.content)) return { role: message.role, content: message.content };
+            const parts = await Promise.all(message.content.map((part) => (part.type === "video_url" ? resolveVideoPart(part, delivery, signal) : Promise.resolve([part]))));
+            return { role: message.role, content: parts.flat() };
+        }),
+    );
+}
+
+export async function requestImageQuestion(config: AiConfig, rawMessages: AiTextMessage[], onDelta: (text: string) => void, options?: RequestOptions) {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
     const script = resolveModelScript(config, config.model || config.textModel);
+    let messages: ResolvedTextMessage[];
+    try {
+        messages = await resolveVideoMessages(rawMessages, (bytes) => chooseVideoDelivery(requestConfig.apiFormat, Boolean(script), bytes), options?.signal);
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("requestFailed")));
+    }
     if (script) {
         try {
             const answer = await runModelPlugin<string>({

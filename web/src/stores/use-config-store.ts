@@ -398,6 +398,46 @@ function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
     return apiFormat === "gemini" || apiFormat === "sora" ? apiFormat : "openai";
 }
 
+export function apiFormatLabel(apiFormat: ApiCallFormat) {
+    if (apiFormat === "gemini") return "Gemini";
+    if (apiFormat === "sora") return "Sora";
+    return "OpenAI";
+}
+
+/**
+ * How a protocol handles a capability:
+ * - native: the protocol has a dedicated request path for it.
+ * - fallback: no dedicated path, so the request is sent over the OpenAI-compatible
+ *   endpoints. Works with relays that accept that format, fails on native upstreams.
+ * - unsupported: the request is rejected before it is sent.
+ */
+export type CapabilitySupport = "native" | "fallback" | "unsupported";
+
+const CAPABILITY_SUPPORT: Record<ApiCallFormat, Record<ModelCapability, CapabilitySupport>> = {
+    openai: { image: "native", video: "native", text: "native", audio: "native" },
+    gemini: { image: "native", video: "unsupported", text: "native", audio: "unsupported" },
+    sora: { image: "fallback", video: "native", text: "fallback", audio: "fallback" },
+};
+
+export function capabilitySupport(apiFormat: ApiCallFormat, capability: ModelCapability): CapabilitySupport {
+    return CAPABILITY_SUPPORT[normalizeApiFormat(apiFormat)][capability];
+}
+
+export type ChannelCapabilityWarning = {
+    model: string;
+    capability: ModelCapability;
+    support: Exclude<CapabilitySupport, "native">;
+};
+
+/** Models whose capability is not natively served by the channel protocol. Models with a custom script are skipped: the script owns the request. */
+export function channelCapabilityWarnings(channel: Pick<ModelChannel, "apiFormat" | "models">): ChannelCapabilityWarning[] {
+    return channel.models.flatMap((model) => {
+        if (model.script?.trim()) return [];
+        const support = capabilitySupport(channel.apiFormat, model.capability);
+        return support === "native" ? [] : [{ model: model.name, capability: model.capability, support }];
+    });
+}
+
 function uniqueModelOptions(models: string[]) {
     return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)));
 }
