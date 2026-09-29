@@ -5,6 +5,8 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+- Gemini image aspect ratio: on a Gemini-protocol provider, generate at 9:16, 16:9, 1:1, and 3:4 from both the canvas and the image workbench. The output ratio should match the selection; High quality should produce 4K-class output (about 3072x5504 for 9:16), and auto should send no ratio.
+
 - Video reverse prompt: hovering a video node with content should show a Reverse prompt toolbar action that creates a preset text node and a text-mode config node, both connected. With a Gemini-protocol text model, videos up to 12MB should be sent inline as the original video; larger videos, other protocols, and models with a request script should fall back to 4 sampled frames, with no frame nodes added to the canvas. Remote videos that cannot be read cross-origin should show a prompt to download and re-upload.
 
 - Provider protocol/capability checks: in a Sora-protocol provider, Image, Text, or Audio models should show a yellow warning icon on the model row plus a summary alert; in a Gemini-protocol provider, Video or Audio models should show a red alert. Models with a request script should not warn, and saving should never be blocked. A failed image request on a Sora provider should append a protocol hint suggesting the Gemini protocol.
