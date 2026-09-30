@@ -88,8 +88,13 @@ export const useAssetStore = create<AssetStore>()(
             cleanupImages: (extra) => {
                 window.setTimeout(async () => {
                     const { useCanvasStore } = await import("@/stores/canvas/use-canvas-store");
-                    await cleanupUnusedImages({ assets: get().assets, projects: useCanvasStore.getState().projects, extra });
-                    await cleanupUnusedMedia({ assets: get().assets, projects: useCanvasStore.getState().projects, extra });
+                    const { useDirectorStore } = await import("@/stores/use-director-store");
+                    // 导演台数据未加载完时无法判断引用，跳过本次清理，避免误删。
+                    if (!useDirectorStore.getState().hydrated) return;
+                    const { scenes, covers, outputs, models } = useDirectorStore.getState();
+                    const used = { assets: get().assets, projects: useCanvasStore.getState().projects, director: { scenes, covers, outputs, models }, extra };
+                    await cleanupUnusedImages(used);
+                    await cleanupUnusedMedia(used);
                 }, 0);
             },
         }),

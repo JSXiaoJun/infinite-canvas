@@ -313,6 +313,7 @@ export default {
         canvas: "My Canvases",
         image: "Image Studio",
         video: "Video Studio",
+        director: "Director Stage",
         prompts: "Prompt Library",
         assets: "My Assets",
         config: "Settings",
