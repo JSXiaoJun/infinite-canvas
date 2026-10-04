@@ -59,7 +59,7 @@ type GenerationLog = {
     error?: string;
 };
 
-type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vquality" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark">;
+type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "videoSize" | "vquality" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
@@ -359,7 +359,7 @@ export default function VideoPage() {
         setPrompt(log.prompt);
         setReferences(log.references || []);
         if (log.config.videoModel || log.model) updateConfig("videoModel", log.config.videoModel || log.model);
-        if (log.config.size) updateConfig("size", log.config.size);
+        if (log.config.videoSize) updateConfig("videoSize", log.config.videoSize);
         if (log.config.vquality) updateConfig("vquality", log.config.vquality);
         if (log.config.videoSeconds) updateConfig("videoSeconds", log.config.videoSeconds);
         if (log.config.videoGenerateAudio) updateConfig("videoGenerateAudio", log.config.videoGenerateAudio);
@@ -442,7 +442,7 @@ export default function VideoPage() {
 
                             <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-900 sm:hidden">
                                 <span className="truncate text-stone-500 dark:text-stone-400">
-                                    {modelOptionLabel(effectiveConfig, model)} · {videoResolutionLabel(effectiveConfig.vquality)} · {videoSizeLabel(effectiveConfig.size)} · {normalizeVideoSeconds(effectiveConfig.videoSeconds)}s
+                                    {modelOptionLabel(effectiveConfig, model)} · {videoResolutionLabel(effectiveConfig.vquality)} · {videoSizeLabel(effectiveConfig.videoSize)} · {normalizeVideoSeconds(effectiveConfig.videoSeconds)}s
                                 </span>
                                 <Button size="small" type="text" icon={<SlidersHorizontal className="size-4" />} onClick={() => setSettingsOpen(true)}>
                                     {t("workbench.adjust")}
@@ -688,7 +688,7 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
         config,
         references,
         durationMs: log.durationMs || 0,
-        size: log.size || config.size || "",
+        size: log.size || config.videoSize || "",
         resolution: normalizeResolution(log.resolution || config.vquality || ""),
         seconds: log.seconds || config.videoSeconds || "",
         status: log.status || "success",
@@ -728,7 +728,7 @@ function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
     return {
         model: log.config?.model || log.model || "",
         videoModel: log.config?.videoModel || log.model || "",
-        size: log.config?.size || log.size || "",
+        videoSize: log.config?.videoSize || log.size || "",
         vquality: normalizeResolution(log.config?.vquality || log.resolution || ""),
         videoSeconds: log.config?.videoSeconds || log.seconds || "",
         videoGenerateAudio: log.config?.videoGenerateAudio || "true",
@@ -740,7 +740,7 @@ function buildLog({ prompt, model, config, references, durationMs, status, task,
     const logConfig = {
         model: config.model,
         videoModel: config.videoModel,
-        size: config.size,
+        videoSize: config.videoSize,
         vquality: normalizeResolution(config.vquality),
         videoSeconds: config.videoSeconds,
         videoGenerateAudio: config.videoGenerateAudio,
@@ -756,7 +756,7 @@ function buildLog({ prompt, model, config, references, durationMs, status, task,
         config: logConfig,
         references,
         durationMs,
-        size: logConfig.size,
+        size: logConfig.videoSize,
         resolution: logConfig.vquality,
         seconds: logConfig.videoSeconds,
         status,
@@ -771,7 +771,7 @@ function buildVideoConfig(config: AiConfig, model: string): AiConfig {
         ...config,
         model,
         videoModel: model,
-        size: normalizeVideoSize(config.size),
+        videoSize: normalizeVideoSize(config.videoSize),
         videoSeconds: normalizeVideoSeconds(config.videoSeconds),
         vquality: normalizeResolution(config.vquality),
         videoGenerateAudio: String(boolConfig(config.videoGenerateAudio, true)),

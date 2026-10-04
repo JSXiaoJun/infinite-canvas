@@ -153,6 +153,6 @@ function imageConfig(config: AiConfig, model: string): AiConfig {
 
 /** 视频尺寸跟随场景画幅（自适应时沿用视频页设置），时长与清晰度沿用视频页设置。 */
 function videoConfig(config: AiConfig, model: string, scene: DirectorScene): AiConfig {
-    const ratio = scene.aspectRatio && scene.aspectRatio !== "adaptive" ? scene.aspectRatio : config.size;
-    return { ...config, channelMode: "local", model, videoModel: model, size: normalizeVideoSizeValue(ratio), vquality: normalizeVideoResolutionValue(config.vquality) };
+    const ratio = scene.aspectRatio && scene.aspectRatio !== "adaptive" ? scene.aspectRatio : config.videoSize;
+    return { ...config, channelMode: "local", model, videoModel: model, videoSize: normalizeVideoSizeValue(ratio), vquality: normalizeVideoResolutionValue(config.vquality) };
 }

@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@/components/model-picker";
+import { imageAspectOptions } from "@/components/image-settings-panel";
+import { videoSizeOptions } from "@/components/video-settings-panel";
 import { ChannelEditorDrawer } from "@/components/layout/channel-editor-drawer";
 import { ConfigPromptSources } from "@/components/layout/config-prompt-sources";
 import { ConfigLocalStorage } from "@/components/layout/config-local-storage";
@@ -263,6 +265,12 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                             onChange={(event) => updateConfig("canvasImageCount", event.target.value)}
                                             onBlur={(event) => updateConfig("canvasImageCount", normalizeImageCount(event.target.value))}
                                         />
+                                    </Form.Item>
+                                    <Form.Item label={t("config.preferences.defaultImageSize")} className="mb-4">
+                                        <Select value={config.size} options={imageAspectOptions} onChange={(value) => updateConfig("size", value)} />
+                                    </Form.Item>
+                                    <Form.Item label={t("config.preferences.defaultVideoSize")} className="mb-4">
+                                        <Select value={config.videoSize} options={videoSizeOptions} onChange={(value) => updateConfig("videoSize", value)} />
                                     </Form.Item>
                                     <Form.Item label={t("config.preferences.audioVoice")} className="mb-4">
                                         <Select value={config.audioVoice} options={audioVoiceOptions} onChange={(value) => updateConfig("audioVoice", value)} />

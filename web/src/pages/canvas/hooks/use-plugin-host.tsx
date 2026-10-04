@@ -60,7 +60,7 @@ export function usePluginHost(params: PluginHostParams) {
                 const config = {
                     ...buildGenerationConfig(effectiveConfig, undefined, "video"),
                     ...(options?.model ? { model: options.model } : {}),
-                    ...(options?.size ? { size: options.size } : {}),
+                    ...(options?.size ? { videoSize: options.size } : {}),
                     ...(options?.seconds ? { videoSeconds: options.seconds } : {}),
                 };
                 ensureReady(config);

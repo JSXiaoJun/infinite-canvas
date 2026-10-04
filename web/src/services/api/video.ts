@@ -94,9 +94,9 @@ async function createPluginVideoTask(config: AiConfig, model: string, script: st
             images: refs,
             params: {
                 seconds: normalizeVideoSeconds(config.videoSeconds),
-                size: normalizeVideoSize(config.size),
+                size: normalizeVideoSize(config.videoSize),
                 resolution: normalizeVideoResolution(config.vquality),
-                ratio: config.size,
+                ratio: config.videoSize,
                 generateAudio: boolConfig(config.videoGenerateAudio, true),
                 watermark: boolConfig(config.videoWatermark, false),
             },
@@ -139,7 +139,7 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
     body.append("model", modelOptionName(model));
     body.append("prompt", prompt);
     body.append("seconds", normalizeVideoSeconds(config.videoSeconds));
-    if (normalizeVideoSize(config.size)) body.append("size", normalizeVideoSize(config.size)!);
+    if (normalizeVideoSize(config.videoSize)) body.append("size", normalizeVideoSize(config.videoSize)!);
     body.append("resolution_name", normalizeVideoResolution(config.vquality));
     body.append("preset", "normal");
     const files = await Promise.all(references.slice(0, 7).map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
@@ -165,7 +165,7 @@ async function createSoraVideoTask(config: AiConfig, model: string, prompt: stri
         model: modelOptionName(model),
         prompt,
         duration: Math.max(1, Math.min(30, Math.floor(Number(config.videoSeconds) || 6))),
-        aspect_ratio: normalizeSoraAspectRatio(config.size),
+        aspect_ratio: normalizeSoraAspectRatio(config.videoSize),
         resolution: normalizeVideoResolution(config.vquality),
         generate_audio: boolConfig(config.videoGenerateAudio, true),
         ...(imageUrls.length ? { image_urls: imageUrls } : {}),

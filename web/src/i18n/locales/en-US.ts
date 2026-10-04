@@ -476,6 +476,8 @@ export default {
             generation: "Generation preferences",
             canvasImageCount: "Default canvas image count",
             canvasImageCountDescription: "Used by new canvas image and configuration nodes. Individual nodes can override it.",
+            defaultImageSize: "Default image aspect ratio",
+            defaultVideoSize: "Default video aspect ratio",
             audioVoice: "Default audio voice",
             audioFormat: "Default audio format",
             audioSpeed: "Default audio speed",

@@ -34,7 +34,7 @@ export const videoSecondOptions = secondOptions.map((value) => String(value));
 type VideoSettingsPanelProps = {
     config: AiConfig;
     model?: string;
-    onConfigChange: (key: "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark", value: string) => void;
+    onConfigChange: (key: "vquality" | "videoSize" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark", value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
@@ -43,7 +43,7 @@ type VideoSettingsPanelProps = {
 export function VideoSettingsPanel({ config, model, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
     const { t } = useTranslation();
     const seconds = config.videoSeconds || "6";
-    const size = normalizeVideoSizeValue(config.size);
+    const size = normalizeVideoSizeValue(config.videoSize);
     const dimensions = readSizeDimensions(size);
     const resolution = normalizeVideoResolutionValue(config.vquality);
     const capabilities = getVideoModelCapabilities(config, model);
@@ -66,7 +66,7 @@ export function VideoSettingsPanel({ config, model, onConfigChange, theme, showT
 
     const updateDimension = (key: "width" | "height", value: number | null) => {
         const next = Math.max(1, Math.floor(value || dimensions[key] || 720));
-        onConfigChange("size", `${key === "width" ? next : dimensions.width}x${key === "height" ? next : dimensions.height}`);
+        onConfigChange("videoSize", `${key === "width" ? next : dimensions.width}x${key === "height" ? next : dimensions.height}`);
     };
 
     return (
@@ -97,7 +97,7 @@ export function VideoSettingsPanel({ config, model, onConfigChange, theme, showT
                                 className="flex h-[78px] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border bg-transparent text-sm transition hover:opacity-80"
                                 style={{ borderColor: size === item.value ? theme.node.text : theme.node.stroke, color: theme.node.text }}
                                 onMouseDown={(event) => event.stopPropagation()}
-                                onClick={() => onConfigChange("size", item.value)}
+                                onClick={() => onConfigChange("videoSize", item.value)}
                             >
                                 <SizePreview width={item.width} height={item.height} color={theme.node.text} />
                                 <span>{t(`settingsPanels.video.sizes.${item.labelKey}`)}</span>

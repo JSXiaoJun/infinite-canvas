@@ -153,7 +153,8 @@ function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: Can
         model: resolveModelForCapability(globalConfig, node.metadata?.model, mode),
         reasoningEffort: node.metadata?.reasoningEffort || globalConfig.reasoningEffort || defaultConfig.reasoningEffort,
         quality: node.metadata?.quality || globalConfig.quality || defaultConfig.quality,
-        size: node.metadata?.size || globalConfig.size || defaultConfig.size,
+        size: (mode !== "video" && node.metadata?.size) || globalConfig.size || defaultConfig.size,
+        videoSize: (mode === "video" && node.metadata?.size) || globalConfig.videoSize || defaultConfig.videoSize,
         background: node.metadata?.background ?? globalConfig.background ?? defaultConfig.background,
         videoSeconds: node.metadata?.seconds || globalConfig.videoSeconds || defaultConfig.videoSeconds,
         vquality: node.metadata?.vquality || globalConfig.vquality || defaultConfig.vquality,
@@ -171,6 +172,7 @@ function videoConfigPatch(key: keyof AiConfig, value: string) {
     if (key === "videoSeconds") return { seconds: value };
     if (key === "videoGenerateAudio") return { generateAudio: value };
     if (key === "videoWatermark") return { watermark: value };
+    if (key === "videoSize") return { size: value };
     return { [key]: value };
 }
 
