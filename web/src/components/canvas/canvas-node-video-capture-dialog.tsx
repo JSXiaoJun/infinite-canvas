@@ -14,7 +14,21 @@ type VideoCaptureSource = { url: string; storageKey?: string };
  * Frame-exact frame picker. Decoding runs through WebCodecs so stepping always lands on a real
  * frame; the native player is only used as a visual reference and is never the capture source.
  */
-export function CanvasNodeVideoCaptureDialog({ source, open, onClose, onConfirm }: { source: VideoCaptureSource | null; open: boolean; onClose: () => void; onConfirm: (selection: VideoCaptureSelection) => void }) {
+export function CanvasNodeVideoCaptureDialog({
+    source,
+    open,
+    startTimeMs,
+    onStartTimeApplied,
+    onClose,
+    onConfirm,
+}: {
+    source: VideoCaptureSource | null;
+    open: boolean;
+    startTimeMs?: number | null;
+    onStartTimeApplied?: () => void;
+    onClose: () => void;
+    onConfirm: (selection: VideoCaptureSelection) => void;
+}) {
     const { t } = useTranslation();
     const [probe, setProbe] = useState<FrameProbe | null>(null);
     const [buffer, setBuffer] = useState<ArrayBuffer | null>(null);
@@ -23,12 +37,21 @@ export function CanvasNodeVideoCaptureDialog({ source, open, onClose, onConfirm 
     const [frame, setFrame] = useState<VideoFrameHandle | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const pendingTimeRef = useRef<number | null>(null);
+    // The parent rebuilds the source object every render, so the effect keys off the stable fields instead.
+    const sourceUrl = source?.url ?? null;
+    const sourceStorageKey = source?.storageKey ?? null;
+    // Keep the callback latest without making it an effect dependency; the parent recreates it every render.
+    const startTimeAppliedRef = useRef(onStartTimeApplied);
+    startTimeAppliedRef.current = onStartTimeApplied;
     const previewRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef(0);
 
     useEffect(() => {
-        if (!open || !source) return;
+        if (!open || !sourceUrl) return;
         let cancelled = false;
+        // Set by the canvas when the native player was paused; consumed once the sample table is known.
+        pendingTimeRef.current = typeof startTimeMs === "number" && startTimeMs > 0 ? startTimeMs : null;
         setProbe(null);
         setBuffer(null);
         setTimes([]);
@@ -37,7 +60,7 @@ export function CanvasNodeVideoCaptureDialog({ source, open, onClose, onConfirm 
         setError(null);
         void (async () => {
             try {
-                const bytes = await readVideoBytes(source);
+                const bytes = await readVideoBytes({ url: sourceUrl, storageKey: sourceStorageKey ?? undefined });
                 if (cancelled) return;
                 const result = await probeVideo(bytes);
                 if (cancelled) return;
@@ -48,7 +71,14 @@ export function CanvasNodeVideoCaptureDialog({ source, open, onClose, onConfirm 
                 }
                 setBuffer(bytes);
                 setProbe(result);
-                setTimes(buildFrameTimes(result.frameCount, result.durationSec));
+                const nextTimes = result.sampleTimesMs;
+                setTimes(nextTimes);
+                const pending = pendingTimeRef.current;
+                if (pending !== null) {
+                    pendingTimeRef.current = null;
+                    setIndex(nearestFrameIndex(nextTimes, pending));
+                    startTimeAppliedRef.current?.();
+                }
             } catch {
                 if (!cancelled) setError(t("canvas.editors.captureUnsupported"));
             }
@@ -56,7 +86,7 @@ export function CanvasNodeVideoCaptureDialog({ source, open, onClose, onConfirm 
         return () => {
             cancelled = true;
         };
-    }, [open, source, t]);
+    }, [open, sourceUrl, sourceStorageKey, startTimeMs, t]);
 
     // Decode sequentially so rapid stepping never runs two decodes at once for one node.
     useEffect(() => {
@@ -137,11 +167,18 @@ export function CanvasNodeVideoCaptureDialog({ source, open, onClose, onConfirm 
     );
 }
 
-/** Uniform frame cadence keeps the slider linear; the container itself only stores timestamps. */
-function buildFrameTimes(frameCount: number, durationSec: number) {
-    if (frameCount <= 0) return [];
-    if (!Number.isFinite(durationSec) || durationSec <= 0) return Array.from({ length: frameCount }, (_, position) => position);
-    return Array.from({ length: frameCount }, (_, position) => (durationSec * 1000 * position) / frameCount);
+/** Index of the frame whose presentation time is closest to `timeMs`. */
+function nearestFrameIndex(times: number[], timeMs: number) {
+    let best = 0;
+    let bestDelta = Number.POSITIVE_INFINITY;
+    for (let position = 0; position < times.length; position += 1) {
+        const delta = Math.abs(times[position] - timeMs);
+        if (delta < bestDelta) {
+            bestDelta = delta;
+            best = position;
+        }
+    }
+    return best;
 }
 
 function formatTime(timeMs: number) {

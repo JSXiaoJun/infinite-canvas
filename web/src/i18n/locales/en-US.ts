@@ -272,7 +272,7 @@ export default {
         },
         reverseComposer: "Reference image: @[node:{{imageId}}]\nTask: @[node:{{textId}}]",
         reverseVideoComposer: "Reference video: @[node:{{videoId}}]\nTask: @[node:{{textId}}]",
-        videoTools: { reversePrompt: "Reverse prompt", reversePromptTitle: "Create text and config nodes to infer a video prompt", capture: "Capture frame", captureTitle: "Step through the video frame by frame and capture one into a new image node", captureSuccess: "Video frame captured", captureFailed: "Failed to capture the video frame", emptyCaptureVideo: "Empty video node, cannot capture a frame" },
+        videoTools: { reversePrompt: "Reverse prompt", reversePromptTitle: "Create text and config nodes to infer a video prompt", capture: "Capture frame", captureTitle: "Start stepping from where the video player is paused and capture a frame into a new image node", captureSuccess: "Video frame captured", captureFailed: "Failed to capture the video frame", emptyCaptureVideo: "Empty video node, cannot capture a frame" },
         editors: {
             reset: "Reset", zoomOut: "Zoom out", zoomIn: "Zoom in", loading: "Loading", unknown: "Unknown", cancel: "Cancel",
             angleTitle: "AI Multi-angle", angleDescription: "The left side previews direction only; the result is regenerated from the original image", horizontal: "Horizontal angle", pitch: "Pitch angle", distance: "Camera distance", lens: "Wide-angle lens", standard: "Standard", wide: "Wide", aiGenerate: "Generate with AI",

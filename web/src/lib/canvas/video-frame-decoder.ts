@@ -8,7 +8,8 @@ const MAX_DECODE_SAMPLES = 6_000;
 export type VideoFrameHandle = { canvas: HTMLCanvasElement; width: number; height: number };
 
 export type FrameProbe =
-    | { supported: true; width: number; height: number; frameCount: number; durationSec: number; fps: number }
+    // sampleTimesMs are the container presentation timestamps, so the picker uses real frame timing.
+    | { supported: true; width: number; height: number; frameCount: number; durationSec: number; fps: number; sampleTimesMs: number[] }
     | { supported: false };
 
 let supportCache: Promise<boolean> | null = null;
@@ -49,7 +50,7 @@ export async function probeVideo(buffer: ArrayBuffer): Promise<FrameProbe> {
     const supported = await isTrackSupported(track);
     if (!supported) return { supported: false };
     const durationSec = track.durationSec;
-    return { supported: true, width: track.codedWidth, height: track.codedHeight, frameCount: track.samples.length, durationSec, fps: durationSec > 0 ? track.samples.length / durationSec : 0 };
+    return { supported: true, width: track.codedWidth, height: track.codedHeight, frameCount: track.samples.length, durationSec, fps: durationSec > 0 ? track.samples.length / durationSec : 0, sampleTimesMs: frameTimes(track) };
 }
 
 /** Frame timestamps in milliseconds, ordered as stored in the container. */

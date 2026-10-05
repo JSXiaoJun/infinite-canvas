@@ -272,7 +272,7 @@ export default {
         },
         reverseComposer: "参考图片：@[node:{{imageId}}]\n任务说明：@[node:{{textId}}]",
         reverseVideoComposer: "参考视频：@[node:{{videoId}}]\n任务说明：@[node:{{textId}}]",
-        videoTools: { reversePrompt: "反推提示词", reversePromptTitle: "创建反推视频提示词的文本和配置节点", capture: "截取帧", captureTitle: "逐帧截取视频画面并生成新的图片节点", captureSuccess: "已截取视频帧", captureFailed: "截取视频帧失败", emptyCaptureVideo: "视频节点为空，无法截取帧" },
+        videoTools: { reversePrompt: "反推提示词", reversePromptTitle: "创建反推视频提示词的文本和配置节点", capture: "截取帧", captureTitle: "从视频控件暂停的位置开始逐帧截取，并生成新的图片节点", captureSuccess: "已截取视频帧", captureFailed: "截取视频帧失败", emptyCaptureVideo: "视频节点为空，无法截取帧" },
         editors: {
             reset: "重置", zoomOut: "缩小", zoomIn: "放大", loading: "读取中", unknown: "未知", cancel: "取消",
             angleTitle: "AI 多角度", angleDescription: "左侧只预览方向，结果会基于原图重新生成", horizontal: "左右角度", pitch: "俯仰角度", distance: "镜头距离", lens: "广角镜头", standard: "标准", wide: "广角", aiGenerate: "AI 生成",

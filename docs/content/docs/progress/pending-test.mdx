@@ -13,7 +13,7 @@ description: Implemented changes that still need manual verification
 
 - Video reverse prompt: hovering a video node with content should show a Reverse prompt toolbar action that creates a preset text node and a text-mode config node, both connected. With a Gemini-protocol text model, videos up to 12MB should be sent inline as the original video; larger videos, other protocols, and models with a request script should fall back to 4 sampled frames, with no frame nodes added to the canvas. Remote videos that cannot be read cross-origin should show a prompt to download and re-upload.
 
- - 画布视频逐帧截取：悬停有内容的视频节点，工具栏应出现「截取帧」按钮，点击后打开逐帧截取弹窗，可拖动进度条或点「上一帧 / 下一帧」逐帧查看，点「首帧 / 尾帧」跳到首尾帧，再点「截取此帧」在视频节点右侧生成一个图片节点并自动连线，图片保持视频原始比例。截取基于 WebCodecs 精确解码，所选帧即实际解码出的那一帧，不受关键帧限制。空视频节点点击时应给出提示，不生成节点；非 MP4/MOV 封装、或编码不是 H.264/HEVC/AV1 的视频（例如 MPEG-4 Part 2、ProRes）应提示无法精确截帧，不生成节点。
+ - 画布视频逐帧截取：悬停有内容的视频节点，工具栏应出现「截取帧」按钮，点击后打开逐帧截取弹窗，弹窗应默认定位到该视频控件当前暂停的位置；可拖动进度条或点「上一帧 / 下一帧」逐帧查看，点「首帧 / 尾帧」跳到首尾帧，再点「截取此帧」在视频节点右侧生成一个图片节点并自动连线，图片保持视频原始比例。截取基于 WebCodecs 精确解码，所选帧即实际解码出的那一帧，不受关键帧限制；帧时间轴直接使用容器内的真实帧时间戳，因此变速 / 可变帧率视频也能逐帧对齐。播放到中途暂停再点「截取帧」时，弹窗应停在同一位置。空视频节点点击时应给出提示，不生成节点；非 MP4/MOV 封装、或编码不是 H.264/HEVC/AV1 的视频（例如 MPEG-4 Part 2、ProRes）应提示无法精确截帧，不生成节点。
 
 - Provider protocol/capability checks: in a Sora-protocol provider, Image, Text, or Audio models should show a yellow warning icon on the model row plus a summary alert; in a Gemini-protocol provider, Video or Audio models should show a red alert. Models with a request script should not warn, and saving should never be blocked. A failed image request on a Sora provider should append a protocol hint suggesting the Gemini protocol.
 

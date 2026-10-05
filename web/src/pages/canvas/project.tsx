@@ -30,6 +30,7 @@ import { CanvasNodeMaskEditDialog, type CanvasImageMaskEditPayload } from "@/com
 import { CanvasNodeSplitDialog, type CanvasImageSplitParams } from "@/components/canvas/canvas-node-split-dialog";
 import { CanvasNodeUpscaleDialog, type CanvasImageUpscaleParams } from "@/components/canvas/canvas-node-upscale-dialog";
 import { CanvasNodeVideoCaptureDialog, type VideoCaptureSelection } from "@/components/canvas/canvas-node-video-capture-dialog";
+import { readVideoPlayhead } from "@/lib/canvas/video-playhead";
 import { buildNodeGenerationContext, buildNodeGenerationInputs, buildNodeResponseMessages, hydrateNodeGenerationContext, type NodeGenerationInput } from "@/components/canvas/canvas-node-generation";
 import { CanvasNodeHoverToolbar, CanvasNodeInfoModal } from "@/components/canvas/canvas-node-hover-toolbar";
 import { InfiniteCanvas } from "@/components/canvas/infinite-canvas";
@@ -229,6 +230,7 @@ function InfiniteCanvasPage() {
     const [splitNodeId, setSplitNodeId] = useState<string | null>(null);
     const [upscaleNodeId, setUpscaleNodeId] = useState<string | null>(null);
     const [captureNodeId, setCaptureNodeId] = useState<string | null>(null);
+    const [captureStartTimeMs, setCaptureStartTimeMs] = useState<number | null>(null);
     const [superResolveNodeId, setSuperResolveNodeId] = useState<string | null>(null);
     const [angleNodeId, setAngleNodeId] = useState<string | null>(null);
     const [previewNodeId, setPreviewNodeId] = useState<string | null>(null);
@@ -1707,6 +1709,8 @@ function InfiniteCanvasPage() {
                 message.warning(t("canvas.videoTools.emptyCaptureVideo"));
                 return;
             }
+            // The node's native player owns the paused position; missing element (node unmounted) just falls back to the first frame.
+            setCaptureStartTimeMs(readVideoPlayhead(node.id)?.timeMs ?? null);
             setCaptureNodeId(node.id);
         },
         [message, t],
@@ -3104,7 +3108,12 @@ function InfiniteCanvasPage() {
                 <CanvasNodeVideoCaptureDialog
                     source={captureNode?.metadata?.content ? { url: captureNode.metadata.content, storageKey: captureNode.metadata.storageKey } : null}
                     open={Boolean(captureNode)}
-                    onClose={() => setCaptureNodeId(null)}
+                    startTimeMs={captureStartTimeMs}
+                    onStartTimeApplied={() => setCaptureStartTimeMs(null)}
+                    onClose={() => {
+                        setCaptureNodeId(null);
+                        setCaptureStartTimeMs(null);
+                    }}
                     onConfirm={(selection) => captureNode && void confirmVideoCapture(captureNode, selection)}
                 />
 
