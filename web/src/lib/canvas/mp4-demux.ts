@@ -14,6 +14,7 @@ export type Mp4TrackInfo = {
     samples: Mp4Sample[];
 };
 
+// dts/cts are microseconds in the track timescale, matching EncodedVideoChunk timestamps.
 export type Mp4Sample = { offset: number; size: number; dts: number; cts: number; isSync: boolean };
 
 export type Mp4Parsed = {
@@ -134,7 +135,7 @@ function parseTrak(view: DataView, buffer: ArrayBuffer, trak: Box): Mp4TrackInfo
     const sampleDts = parseStts(view, stts, sizes.length);
     const compositionOffsets = ctts ? parseCtts(view, ctts, sizes.length) : null;
 
-    const samples = buildSamples(sizes, chunkOffsets, stscEntries, sampleDts, compositionOffsets, syncSamples);
+    const samples = buildSamples(sizes, chunkOffsets, stscEntries, sampleDts, compositionOffsets, syncSamples, timescale);
     if (!samples.length) return null;
 
     return {
@@ -268,8 +269,10 @@ function parseCtts(view: DataView, ctts: Box, total: number) {
     return offsets;
 }
 
-function buildSamples(sizes: number[], chunkOffsets: number[], stsc: { firstChunk: number; samplesPerChunk: number }[], dts: number[], cts: number[] | null, sync: Set<number> | null): Mp4Sample[] {
+// dts/stts arrive in the track timescale; every consumer (EncodedVideoChunk, seek math) expects microseconds.
+function buildSamples(sizes: number[], chunkOffsets: number[], stsc: { firstChunk: number; samplesPerChunk: number }[], dts: number[], cts: number[] | null, sync: Set<number> | null, timescale: number): Mp4Sample[] {
     const samples: Mp4Sample[] = [];
+    const toMicros = timescale > 0 ? 1_000_000 / timescale : 1;
     let sampleIndex = 0;
     for (let chunk = 0; chunk < chunkOffsets.length; chunk += 1) {
         let perChunk = stsc.length ? stsc[0].samplesPerChunk : 0;
@@ -281,8 +284,8 @@ function buildSamples(sizes: number[], chunkOffsets: number[], stsc: { firstChun
             samples.push({
                 offset,
                 size: sizes[sampleIndex],
-                dts: dts[sampleIndex] || 0,
-                cts: (dts[sampleIndex] || 0) + (cts ? cts[sampleIndex] || 0 : 0),
+                dts: Math.round((dts[sampleIndex] || 0) * toMicros),
+                cts: Math.round(((dts[sampleIndex] || 0) + (cts ? cts[sampleIndex] || 0 : 0)) * toMicros),
                 isSync: sync ? sync.has(sampleIndex) : true,
             });
             offset += sizes[sampleIndex];

@@ -53,9 +53,9 @@ export async function probeVideo(buffer: ArrayBuffer): Promise<FrameProbe> {
     return { supported: true, width: track.codedWidth, height: track.codedHeight, frameCount: track.samples.length, durationSec, fps: durationSec > 0 ? track.samples.length / durationSec : 0, sampleTimesMs: frameTimes(track) };
 }
 
-/** Frame timestamps in milliseconds, ordered as stored in the container. */
+/** Frame presentation timestamps in milliseconds, sorted because B-frames are stored in decode order. */
 export function frameTimes(track: Mp4TrackInfo) {
-    return track.samples.map((sample) => sample.cts / 1000);
+    return track.samples.map((sample) => sample.cts / 1000).sort((a, b) => a - b);
 }
 
 /**
@@ -71,11 +71,18 @@ export async function decodeFrameAt(buffer: ArrayBuffer, timeMs: number, signal?
     const targetUs = Math.max(0, timeMs) * 1000;
     const index = nearestSampleIndex(track.samples, targetUs);
     const keyIndex = previousKeyframeIndex(track.samples, index);
+    // With B-frames the decoder emits frames in decode order, so the target frame is only produced
+    // after feeding samples that come after it. Feed up to the next keyframe and match by timestamp.
+    const lastIndex = nextKeyframeIndex(track.samples, index);
+    const targetCts = track.samples[index].cts;
     let settle: (value: VideoFrame | Error) => void = () => undefined;
     const decoder = new VideoDecoder({
         output: (output) => {
-            if (output.timestamp >= track.samples[index].cts) settle(output);
-            else output.close();
+            if (output.timestamp === targetCts) {
+                settle(output);
+                return;
+            }
+            output.close();
         },
         error: (error) => settle(new Error(error.message)),
     });
@@ -94,10 +101,13 @@ export async function decodeFrameAt(buffer: ArrayBuffer, timeMs: number, signal?
             settle = done;
             signal?.addEventListener("abort", onAbort, { once: true });
             try {
-                for (let position = keyIndex; position <= index; position += 1) {
+                // Chunks are fed in decode order (samples are stored that way) but carry their
+                // presentation time, which is what the decoder hands back on the output frame.
+                for (let position = keyIndex; position <= lastIndex; position += 1) {
                     const sample = track.samples[position];
                     decoder.decode(new EncodedVideoChunk({ type: sample.isSync ? "key" : "delta", timestamp: sample.cts, duration: sampleDurationUs(track, position), data: sampleBytes(buffer, sample) }));
                 }
+                void decoder.flush();
             } catch (error) {
                 done(error instanceof Error ? error : new Error(String(error)));
             }
@@ -136,7 +146,6 @@ function nearestSampleIndex(samples: Mp4Sample[], targetUs: number) {
             bestDelta = delta;
             best = index;
         }
-        if (samples[index].cts > targetUs && delta > bestDelta) break;
     }
     return best;
 }
@@ -146,6 +155,14 @@ function previousKeyframeIndex(samples: Mp4Sample[], index: number) {
         if (samples[position].isSync) return position;
     }
     return 0;
+}
+
+/** Last sample that still has to be fed so the target frame can be reordered into place. */
+function nextKeyframeIndex(samples: Mp4Sample[], index: number) {
+    for (let position = index + 1; position < samples.length; position += 1) {
+        if (samples[position].isSync) return position - 1;
+    }
+    return samples.length - 1;
 }
 
 function sampleDurationUs(track: Mp4TrackInfo, index: number) {
