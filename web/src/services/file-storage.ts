@@ -1,6 +1,8 @@
 import localforage from "localforage";
 import { nanoid } from "nanoid";
 
+import { withLocalProxy } from "@/stores/use-config-store";
+
 export type UploadedFile = { url: string; storageKey: string; bytes: number; mimeType: string; width?: number; height?: number; durationMs?: number };
 export type MediaUploadOptions = { signal?: AbortSignal; timeoutMs?: number };
 
@@ -115,7 +117,7 @@ async function fetchMediaBlob(url: string, options?: MediaUploadOptions) {
     options?.signal?.addEventListener("abort", abort, { once: true });
     try {
         if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await fetch(withLocalProxy(url), { signal: controller.signal });
         if (!response.ok) throw new Error(`Media download failed (${response.status})`);
         return response.blob();
     } catch (error) {
