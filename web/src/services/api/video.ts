@@ -16,7 +16,7 @@ import type { ReferenceImage } from "@/types/image";
 type VideoResponse = { id?: string; task_id?: string; status?: string; error?: unknown; message?: unknown; detail?: unknown; url?: string; result_url?: string; video_url?: string; download_url?: string; content?: { video_url?: string; url?: string; download_url?: string } | null };
 type ApiVideoResponse = VideoResponse | { code?: number | string; data?: unknown; msg?: string; message?: string; error?: unknown };
 type ApiEnvelope<T> = T | { code?: number | string; data?: T | null; msg?: string; message?: string; error?: { message?: string } };
-type RequestOptions = { signal?: AbortSignal; referenceVideos?: ReferenceVideo[]; referenceAudios?: ReferenceAudio[] };
+type RequestOptions = { signal?: AbortSignal };
 type VideoGenerationTaskProvider = "openai" | "sora" | "gemini" | "plugin";
 type VideoMediaOptions = RequestOptions & { videos?: ReferenceVideo[]; audios?: ReferenceAudio[] };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
@@ -196,9 +196,9 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
     }
 }
 
-async function createSoraVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
-    const referenceVideos = options?.referenceVideos || [];
-    const referenceAudios = options?.referenceAudios || [];
+async function createSoraVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    const referenceVideos = options?.videos || [];
+    const referenceAudios = options?.audios || [];
     const [imageUrls, videoUrls, audioUrls] = await Promise.all([
         Promise.all(references.map((reference) => publicImageUrl(reference, options?.signal))),
         Promise.all(referenceVideos.map((reference) => publicMediaUrl(reference, options?.signal))),

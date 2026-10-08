@@ -121,3 +121,5 @@ The Chinese version contains the complete item-by-item acceptance checklist.
 - Default video generation mode: without a manual change, video settings in the canvas config node and the video workbench should default to General reference and send `reference`. Users who explicitly saved First & last frame should keep their choice; a single reference image is also sent as a general reference.
 
 - 25s video duration preset: video settings should offer a 25s duration preset, and the selected value should persist in generation requests and history. Models with a custom duration list (such as YYAPI) should still show only their cached durations.
+
+- Canvas Sora-protocol references: when generating a video through a Sora-protocol provider, reference videos and audio connected on the canvas should actually be sent with the request - `reference_video` for the video (local files are uploaded to the dedicated R2 first) and `audio_urls` for audio. The earlier behavior where the request contained no reference video is fixed; OpenAI and Gemini providers are unchanged.
