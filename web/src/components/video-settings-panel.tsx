@@ -16,7 +16,7 @@ const resolutionOptions = [
     { value: "2k", label: "2k" },
 ];
 
-const secondOptions = [4, 6, 8, 10, 15, 20, 30];
+const secondOptions = [4, 6, 8, 10, 15, 20, 25, 30];
 
 const videoModeOptions = [
     { value: "frames", labelKey: "frames" },
