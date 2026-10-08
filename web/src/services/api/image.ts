@@ -223,7 +223,7 @@ function resolveGeminiImageConfig(config: AiConfig) {
     const dimensions = parseImageDimensions(value);
     const ratio = dimensions ? `${dimensions.width}:${dimensions.height}` : value;
     const aspectRatio = value && value.toLowerCase() !== "auto" ? closestGeminiAspectRatio(ratio) : undefined;
-    const imageSize = supportsGeminiImageSize(config.model) ? resolveGeminiImageSize(config.quality, dimensions) : undefined;
+    const imageSize = resolveGeminiImageSize(config.quality, dimensions);
     const imageConfig = { ...(aspectRatio ? { aspectRatio } : {}), ...(imageSize ? { imageSize } : {}) };
     // Gemini reads generationConfig.imageConfig; unknown fields such as responseFormat are silently ignored.
     return Object.keys(imageConfig).length ? { imageConfig } : {};
@@ -251,11 +251,6 @@ function resolveGeminiImageSize(quality: string, dimensions: { width: number; he
     if (edge <= 1536) return "1K";
     if (edge <= 3072) return "2K";
     return "4K";
-}
-
-function supportsGeminiImageSize(model: string) {
-    const value = model.toLowerCase();
-    return value.includes("gemini-3") || value.includes("3.1") || value.includes("3-pro");
 }
 
 function resolveImageDataUrl(value: unknown) {
