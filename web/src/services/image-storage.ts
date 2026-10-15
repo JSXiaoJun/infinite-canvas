@@ -225,7 +225,12 @@ export async function setImageBlob(storageKey: string, blob: Blob) {
 export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }, options?: ImageReadOptions) {
     const url = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
     if (!url || url.startsWith("data:")) return url;
-    return blobToDataUrl(await fetchImageBlob(url, options));
+    try {
+        return await blobToDataUrl(await fetchImageBlob(url, options));
+    } catch (error) {
+        if (error instanceof TypeError) throw new Error(i18n.t("apiErrors.referenceImageReadFailed"));
+        throw error;
+    }
 }
 
 export async function deleteStoredImages(keys: Iterable<string>) {

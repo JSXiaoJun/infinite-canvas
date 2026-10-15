@@ -33,7 +33,7 @@ import { CanvasNodeSplitDialog, type CanvasImageSplitParams } from "@/components
 import { CanvasNodeUpscaleDialog, type CanvasImageUpscaleParams } from "@/components/canvas/canvas-node-upscale-dialog";
 import { CanvasNodeVideoCaptureDialog, type VideoCaptureSelection } from "@/components/canvas/canvas-node-video-capture-dialog";
 import { readVideoPlayhead } from "@/lib/canvas/video-playhead";
-import { buildNodeGenerationContext, buildNodeGenerationInputs, buildNodeResponseMessages, hydrateNodeGenerationContext, type NodeGenerationInput } from "@/components/canvas/canvas-node-generation";
+import { buildNodeGenerationContext, buildNodeGenerationInputs, buildNodeResponseMessages, hydrateNodeGenerationContext, type NodeGenerationContext, type NodeGenerationInput } from "@/components/canvas/canvas-node-generation";
 import { CanvasNodeHoverToolbar, CanvasNodeInfoModal } from "@/components/canvas/canvas-node-hover-toolbar";
 import { CanvasSelectionToolbar } from "@/components/canvas/canvas-selection-toolbar";
 import { InfiniteCanvas } from "@/components/canvas/infinite-canvas";
@@ -2442,6 +2442,7 @@ function InfiniteCanvasPage() {
                     }
                 } finally {
                     finishGenerationRequest(nodeId, controller);
+                    setRunningNodeId((current) => (current === nodeId ? null : current));
                 }
                 return;
             }
@@ -2450,9 +2451,17 @@ function InfiniteCanvasPage() {
             const runController = startGenerationRequest(nodeId, nodeId, nodeId);
             const sourceTextContent = sourceNode?.type === CanvasNodeType.Text ? sourceNode.metadata?.content?.trim() || "" : "";
             const editingTextNode = mode === "text" && Boolean(sourceTextContent);
-            const generationContext = await hydrateNodeGenerationContext(
-                buildNodeGenerationContext(nodeId, nodesRef.current, connectionsRef.current, editingTextNode ? t("canvas.projectPage.editTextPrompt", { source: sourceTextContent, prompt }) : prompt),
-            );
+            let generationContext: NodeGenerationContext;
+            try {
+                generationContext = await hydrateNodeGenerationContext(
+                    buildNodeGenerationContext(nodeId, nodesRef.current, connectionsRef.current, editingTextNode ? t("canvas.projectPage.editTextPrompt", { source: sourceTextContent, prompt }) : prompt),
+                );
+            } catch (error) {
+                finishGenerationRequest(nodeId, runController);
+                setRunningNodeId((current) => (current === nodeId ? null : current));
+                if (!isGenerationCanceled(error)) message.error(error instanceof Error ? error.message : t("canvas.projectPage.generationFailed"));
+                return;
+            }
             const effectivePrompt = generationContext.prompt.trim();
             if (runController.signal.aborted) {
                 finishGenerationRequest(nodeId, runController);
@@ -2875,7 +2884,15 @@ function InfiniteCanvasPage() {
                 return;
             }
 
-            const context = hasSavedImageMetadata ? null : await hydrateNodeGenerationContext(buildNodeGenerationContext(sourceNode.id, nodesRef.current, connectionsRef.current, sourceNode.metadata?.prompt || node.metadata?.prompt || ""));
+            let context: NodeGenerationContext | null = null;
+            if (!hasSavedImageMetadata) {
+                try {
+                    context = await hydrateNodeGenerationContext(buildNodeGenerationContext(sourceNode.id, nodesRef.current, connectionsRef.current, sourceNode.metadata?.prompt || node.metadata?.prompt || ""));
+                } catch (error) {
+                    if (!isGenerationCanceled(error)) message.error(error instanceof Error ? error.message : t("canvas.projectPage.generationFailed"));
+                    return;
+                }
+            }
             const prompt = (savedImageMetadata?.prompt || context?.prompt || "").trim();
             if (!prompt) {
                 message.warning(t("canvas.projectPage.retryPromptMissing"));
