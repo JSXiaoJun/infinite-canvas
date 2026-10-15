@@ -7,6 +7,8 @@ description: Implemented changes that still need manual verification
 
 - Default image/video aspect ratio: Preferences should offer Default image aspect ratio and Default video aspect ratio. New canvas image nodes, config nodes (in image or video mode), and the image/video workbenches should start from these defaults, and per-node changes should still override them. Changing the video size must no longer change the image ratio, and vice versa.
 
+- Default video quality: Preferences should offer Default video quality with 480p / 720p / 768p / 1080p / 2k / 4k, defaulting to 720p. The video workbench and canvas video settings should start from this resolution and use it with the selected aspect ratio to compute W/H; per-node or per-session changes should still override it, and reopening the settings page should keep the selection.
+
 - Director Stage: the top navigation should include Director Stage; its scene list should create scenes from templates, delete scenes, and keep them after a reload. Opening a scene should hide the top navigation, the back button should return to the list, and a changed scene should refresh its list cover with the latest viewport capture. The workbench should add actors, primitives, lights, and camera presets, support move/rotate/scale gizmos, layout/pose/animate/camera modes, pose presets and bones, keyframe recording and playback, 3D/CAM/orthographic views, aspect ratios, undo/redo, and shortcuts. Uploaded .glb/.gltf models should go to the director model library; images from My Assets should work as billboards and panorama backgrounds; uploaded panoramas, screenshots, and AI panoramas should appear in My Assets. The Generate panel should compile an editable prompt from the scene, send the current composition as a reference image for image or video generation, and keep results (download, delete, survive reloads; in-flight requests are marked interrupted after a reload). Export clay should save the recorded clay video to the results. Colors should follow both light and dark themes, and deleting assets or canvas content must not remove director covers, models, screenshots, or results.
 
 - Gemini image aspect ratio: on a Gemini-protocol provider, generate at 9:16, 16:9, 1:1, and 3:4 from both the canvas and the image workbench. The output ratio should match the selection; High quality should produce 4K-class output (about 3072x5504 for 9:16), and auto should send no ratio.
@@ -28,6 +30,8 @@ description: Implemented changes that still need manual verification
 - 画布生成参考素材：连接到生成配置节点的图片、视频、音频和文本应始终自动进入生成上下文，无需逐个 `@`；Sora 视频请求应先上传本地媒体并发送公网 `image_urls`、`reference_video` 和 `audio_urls`。在组装提示词中使用 `@` 时仅插入对应素材标签或文本位置，不应排除其他已连接素材。
 
 - 视频设置清晰度预设：打开视频设置面板应能选择 768p，选择后生成请求与历史记录应保留并显示 768p。
+
+- Video quality 2k / 4k: the video settings panel should offer 2k and 4k. Selecting them should fill W/H from the image resolution table (4k: 3840x2160 at 16:9, 2160x3840 at 9:16, 2880x2880 at 1:1; 2k: 2048x1152 at 16:9), and generation requests and history should keep showing 2k / 4k; the earlier fallback from 2k to 720p should be gone. 480p / 720p / 768p / 1080p should keep computing from the resolution value times the ratio.
 
 - 画布视频完成态：视频任务查询返回 `completed` 且通过 `video_url`、`url`、`result_url` 或 `download_url` 提供视频时，节点应结束转圈并正常播放；远程视频下载被 CORS 拦截、响应缓慢或视频元信息迟迟不返回时，应回退使用公网 URL，不应无限停留在生成中。使用生成配置连续生成多条视频时，直接响应和无 `code` 的 `data` 包装响应都应正确识别，常见失败、取消、拒绝、过期和超时终态及携带错误信息的响应应立即显示失败；快速重复点击不应创建重复任务或遗留永久加载节点，取消生成仍应保持取消状态。
 

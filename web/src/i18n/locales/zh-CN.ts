@@ -512,6 +512,7 @@ export default {
             canvasImageCountDescription: "新建画布生图和配置节点默认使用，单个节点仍可单独覆盖。",
             defaultImageSize: "默认图片比例",
             defaultVideoSize: "默认视频比例",
+            defaultVideoQuality: "默认视频清晰度",
             audioVoice: "默认音频声音",
             audioFormat: "默认音频格式",
             audioSpeed: "默认音频语速",

@@ -512,6 +512,7 @@ export default {
             canvasImageCountDescription: "Used by new canvas image and configuration nodes. Individual nodes can override it.",
             defaultImageSize: "Default image aspect ratio",
             defaultVideoSize: "Default video aspect ratio",
+            defaultVideoQuality: "Default video quality",
             audioVoice: "Default audio voice",
             audioFormat: "Default audio format",
             audioSpeed: "Default audio speed",

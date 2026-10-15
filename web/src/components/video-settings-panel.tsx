@@ -14,6 +14,7 @@ const resolutionOptions = [
     { value: "480", label: "480p" },
     { value: "1080", label: "1080p" },
     { value: "2k", label: "2k" },
+    { value: "4k", label: "4k" },
 ];
 
 const secondOptions = [4, 6, 8, 10, 15, 20, 25, 30];

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@/components/model-picker";
 import { imageAspectOptions } from "@/components/image-settings-panel";
-import { videoSizeOptions } from "@/components/video-settings-panel";
+import { videoResolutionOptions, videoSizeOptions } from "@/components/video-settings-panel";
 import { ChannelEditorDrawer } from "@/components/layout/channel-editor-drawer";
 import { ConfigLocalProxy } from "@/components/layout/config-local-proxy";
 import { ConfigPromptSources } from "@/components/layout/config-prompt-sources";
@@ -17,6 +17,7 @@ import { fetchYyapiVideoCapabilities, isYyapiBaseUrl } from "@/services/api/vide
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@/services/app-sync";
 import { testWebdavConnection, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
+import { computeVideoSize, inferVideoRatio } from "@/lib/media-size";
 import { apiFormatLabel, createModelChannel, defaultReversePrompt, modelOptionsFromChannels, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore, type AiConfig, type ApiCallFormat, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
 
 type ModelGroup = {
@@ -276,7 +277,17 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                         <Select value={config.size} options={imageAspectOptions} onChange={(value) => updateConfig("size", value)} />
                                     </Form.Item>
                                     <Form.Item label={t("config.preferences.defaultVideoSize")} className="mb-4">
-                                        <Select value={config.videoSize} options={videoSizeOptions} onChange={(value) => updateConfig("videoSize", value)} />
+                                        <Select value={inferVideoRatio(config.videoSize)} options={videoSizeOptions} onChange={(value) => updateConfig("videoSize", computeVideoSize(config.vquality, value))} />
+                                    </Form.Item>
+                                    <Form.Item label={t("config.preferences.defaultVideoQuality")} className="mb-4">
+                                        <Select
+                                            value={config.vquality}
+                                            options={videoResolutionOptions}
+                                            onChange={(value) => {
+                                                updateConfig("vquality", value);
+                                                updateConfig("videoSize", computeVideoSize(value, inferVideoRatio(config.videoSize)));
+                                            }}
+                                        />
                                     </Form.Item>
                                     <Form.Item label={t("config.preferences.audioVoice")} className="mb-4">
                                         <Select value={config.audioVoice} options={audioVoiceOptions} onChange={(value) => updateConfig("audioVoice", value)} />
