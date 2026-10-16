@@ -5,6 +5,8 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+- 生图工作台生成中卡片：点击「开始生成」后，左侧生成记录顶部应立即出现带加载图标、提示词和等待计时的「生成中」卡片并处于选中态。等待期间点击任意历史记录（包括失败、无图片的记录）右侧应切换为该记录；点「新建」应清空提示词和参考图、右侧显示空状态；点「生成中」卡片应回到进行中的结果，计时持续。生成完成后该卡片消失、新增一条正式记录，结果不丢失。移动端在记录抽屉里点「生成中」卡片应关闭抽屉。
+
 - gpt-image-2.5 quality tiers: in the image workbench and canvas image settings, pick a model whose name contains `gpt-image-2.5` (e.g. `[专线] gpt-image-2.5-sunburst`). Quality should show Auto / Max / Extra high / High / Medium / Low; Max and Extra high should send `quality` as `max` / `xhigh`, with the size computed from the 4k tier. Other models should not show these two tiers, and a previously selected one is sent as `high`.
 
 - Relaxed video/audio timeouts: a single video task create or poll request should not time out if it returns within 2 minutes, and downloading a large generated video or audio file should succeed if it finishes within 10 minutes.
