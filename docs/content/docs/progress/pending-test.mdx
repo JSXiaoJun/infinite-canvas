@@ -5,6 +5,10 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+- gpt-image-2.5 quality tiers: in the image workbench and canvas image settings, pick a model whose name contains `gpt-image-2.5` (e.g. `[专线] gpt-image-2.5-sunburst`). Quality should show Auto / Max / Extra high / High / Medium / Low; Max and Extra high should send `quality` as `max` / `xhigh`, with the size computed from the 4k tier. Other models should not show these two tiers, and a previously selected one is sent as `high`.
+
+- Relaxed video/audio timeouts: a single video task create or poll request should not time out if it returns within 2 minutes, and downloading a large generated video or audio file should succeed if it finishes within 10 minutes.
+
 - Default image/video aspect ratio: Preferences should offer Default image aspect ratio and Default video aspect ratio. New canvas image nodes, config nodes (in image or video mode), and the image/video workbenches should start from these defaults, and per-node changes should still override them. Changing the video size must no longer change the image ratio, and vice versa.
 
 - Default video quality: Preferences should offer Default video quality with 480p / 720p / 768p / 1080p / 2k / 4k, defaulting to 720p. The video workbench and canvas video settings should start from this resolution and use it with the selected aspect ratio to compute W/H; per-node or per-session changes should still override it, and reopening the settings page should keep the selection.
@@ -25,7 +29,7 @@ description: Implemented changes that still need manual verification
 
 - 生图工作台模型路由：选择名称包含服务前缀的渠道模型（例如 `[反重力] gemini-3-pro-image`）后，请求应使用该渠道的 Base URL、API Key 和完整模型名称，不得改成其他渠道的同名基础模型或删除方括号前缀；文生图、参考图生图和失败重试行为应一致。
 
-- 视频请求错误提示：视频任务创建或查询请求超过 30 秒，或接口返回 408、504、524 时，画布节点应显示“视频生成超时”，不应显示跨域错误；真正的浏览器跨域失败仍应显示跨域提示。
+- 视频请求错误提示：视频任务创建或查询请求超过 2 分钟，或接口返回 408、504、524 时，画布节点应显示“视频生成超时”，不应显示跨域错误；真正的浏览器跨域失败仍应显示跨域提示。
 
 - 画布生成参考素材：连接到生成配置节点的图片、视频、音频和文本应始终自动进入生成上下文，无需逐个 `@`；Sora 视频请求应先上传本地媒体并发送公网 `image_urls`、`reference_video` 和 `audio_urls`。在组装提示词中使用 `@` 时仅插入对应素材标签或文本位置，不应排除其他已连接素材。
 

@@ -36,7 +36,7 @@ export type VideoTaskPollingOptions = { intervalMs: number; maxAttempts: number 
 /** Results for scripted (plugin) video models, which run their own create+poll in one shot at task creation. */
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
 const publicAssetUrls = new Map<string, string>();
-const VIDEO_REQUEST_TIMEOUT_MS = 30_000;
+const VIDEO_REQUEST_TIMEOUT_MS = 2 * 60_000;
 const VIDEO_COMPLETED_STATUSES = new Set(["completed", "complete", "succeeded", "success", "done", "finished"]);
 const VIDEO_FAILED_STATUSES = new Set(["failed", "failure", "error", "cancelled", "canceled", "rejected", "expired", "aborted", "timeout", "timed_out"]);
 

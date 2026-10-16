@@ -29,7 +29,7 @@ export default {
         imageReadFailed: "Failed to read image",
     },
     settingsPanels: {
-        common: { auto: "Auto", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high" },
+        common: { auto: "Auto", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" },
         image: { title: "Image settings", quality: "Quality", size: "Size", align16: "Align to multiples of 16", align16Hint: "Round dimensions up to the next multiple of 16 after input", aspectRatio: "Aspect ratio", transparent: "Transparent background", transparentHint: "Generate an image without a background when supported by the model", count: "Image count", images: "{{count}} images", resolution: "Resolution" },
         video: { title: "Video settings", quality: "Quality", size: "Size", seconds: "Seconds", resolution: "Resolution", ratio: "Aspect ratio", duration: "Duration", smart: "Smart", output: "Output", generateAudio: "Generate audio", watermark: "Add watermark", adaptive: "Adaptive", sizes: { landscape: "Landscape", portrait: "Portrait", standardLandscape: "Standard landscape", standardPortrait: "Standard portrait", square: "Square", widescreen: "Widescreen", tall: "Tall", auto: "Auto" }, ratios: { landscape: "Landscape", portrait: "Portrait", square: "Square", standardLandscape: "Standard landscape", standardPortrait: "Standard portrait", cinematic: "Cinematic", adaptive: "Adaptive" }, mode: "Mode", modes: { frames: "First & last frame", reference: "General reference" } },
         audio: { title: "Audio settings", voice: "Voice", format: "Format", speed: "Speed", instructions: "Voice instructions", instructionsPlaceholder: "For example: natural, warm, and suitable for narration." },

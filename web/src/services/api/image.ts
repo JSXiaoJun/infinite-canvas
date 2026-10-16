@@ -8,7 +8,7 @@ import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
 import { extractVideoFrames, readVideoBlob, VIDEO_FRAME_COUNT } from "@/lib/video-frames";
-import { imageSizePresets, inferMediaScale } from "@/lib/media-size";
+import { imageSizePresets, inferMediaScale, supportsExtendedImageQuality } from "@/lib/media-size";
 import type { ReferenceImage } from "@/types/image";
 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
@@ -116,6 +116,8 @@ const QUALITY_BASE: Record<string, number> = {
     low: 1024,
     medium: 2048,
     high: 2880,
+    xhigh: 2880,
+    max: 2880,
     standard: 1024,
     hd: 2048,
 };
@@ -135,12 +137,17 @@ const IMAGE_OUTPUT_FORMAT = "png";
 const IMAGE_REQUEST_TIMEOUT_MS = 10 * 60_000;
 
 const GEMINI_SUPPORTED_RATIOS = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
-const GEMINI_IMAGE_SIZE_BY_QUALITY: Record<string, string> = { low: "1K", medium: "2K", high: "4K", standard: "1K", hd: "2K" };
+const GEMINI_IMAGE_SIZE_BY_QUALITY: Record<string, string> = { low: "1K", medium: "2K", high: "4K", xhigh: "4K", max: "4K", standard: "1K", hd: "2K" };
 
 function normalizeQuality(quality: string) {
     const value = quality.trim().toLowerCase();
     const normalized = QUALITY_ALIASES[value] || value;
     return QUALITY_BASE[normalized] ? normalized : undefined;
+}
+
+/** xhigh / max are gpt-image-2.5 only; other models fall back to high. */
+function requestQuality(quality: string | undefined, model: string) {
+    return (quality === "xhigh" || quality === "max") && !supportsExtendedImageQuality(model) ? "high" : quality;
 }
 
 /** Only "transparent" is forwarded; any other value (incl. empty) means keep the default opaque background. */
@@ -151,7 +158,7 @@ function normalizeBackground(background: string | undefined) {
 /** Map "quality + ratio" to an explicit pixel dimension like "3840x2160". */
 function resolveSize(quality: string | undefined, ratio: string): string {
     const parsedRatio = parseImageRatio(ratio);
-    const scale = quality === "high" ? "4k" : quality === "medium" || quality === "hd" ? "2k" : "1k";
+    const scale = quality === "high" || quality === "xhigh" || quality === "max" ? "4k" : quality === "medium" || quality === "hd" ? "2k" : "1k";
     const preset = imageSizePresets[scale][ratio];
     if (preset) return preset;
     const basePixels = quality ? QUALITY_BASE[quality] : undefined;
@@ -786,7 +793,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
-        const quality = normalizeQuality(config.quality);
+        const quality = requestQuality(normalizeQuality(config.quality), requestConfig.model);
         const requestSize = resolveRequestSize(quality, config.size);
         const background = normalizeBackground(config.background);
         try {
@@ -811,7 +818,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }
     }
-    const quality = normalizeQuality(config.quality);
+    const quality = requestQuality(normalizeQuality(config.quality), requestConfig.model);
     const requestSize = resolveRequestSize(quality, config.size);
     const background = normalizeBackground(config.background);
     try {
@@ -847,7 +854,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     const requestPrompt = buildImageReferencePromptText(prompt, references);
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
-        const quality = normalizeQuality(config.quality);
+        const quality = requestQuality(normalizeQuality(config.quality), requestConfig.model);
         const requestSize = resolveRequestSize(quality, config.size);
         const background = normalizeBackground(config.background);
         const refs = await Promise.all(references.map((image) => imageToDataUrl(image)));
@@ -874,7 +881,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
         }
     }
 
-    const quality = normalizeQuality(config.quality);
+    const quality = requestQuality(normalizeQuality(config.quality), requestConfig.model);
     const requestSize = resolveRequestSize(quality, config.size);
     const background = normalizeBackground(config.background);
     const formData = new FormData();

@@ -8,7 +8,7 @@ export type MediaUploadOptions = { signal?: AbortSignal; timeoutMs?: number };
 
 const store = localforage.createInstance({ name: "infinite-canvas", storeName: "media_files" });
 const objectUrls = new Map<string, string>();
-const MEDIA_DOWNLOAD_TIMEOUT_MS = 30_000;
+const MEDIA_DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
 const MEDIA_META_TIMEOUT_MS = 10_000;
 
 export async function uploadMediaFile(input: string | Blob, prefix = "file", options?: MediaUploadOptions): Promise<UploadedFile> {

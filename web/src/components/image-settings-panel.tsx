@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import { computeMediaSize, inferMediaRatio, inferMediaScale, mediaRatioOptions, mediaScaleOptions, readMediaDimensions } from "@/lib/media-size";
-import type { AiConfig } from "@/stores/use-config-store";
+import { computeMediaSize, inferMediaRatio, inferMediaScale, mediaRatioOptions, mediaScaleOptions, readMediaDimensions, supportsExtendedImageQuality } from "@/lib/media-size";
+import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
 
 const qualityOptions = [
     { value: "auto", labelKey: "auto" },
@@ -13,6 +13,7 @@ const qualityOptions = [
     { value: "medium", labelKey: "medium" },
     { value: "low", labelKey: "low" },
 ];
+const extendedQualityOptions = [{ value: "max", labelKey: "max" }, { value: "xhigh", labelKey: "xhigh" }, ...qualityOptions.slice(1)];
 const DIMENSION_STEP = 16;
 
 export const imageQualityOptions = qualityOptions.map((item) => ({ value: item.value, get label() { return i18n.t(`settingsPanels.common.${item.labelKey}`); } }));
@@ -33,6 +34,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const { t } = useTranslation();
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
     const quality = config.quality || "auto";
+    const qualityItems = supportsExtendedImageQuality(modelOptionName(config.model || config.imageModel)) ? [qualityOptions[0], ...extendedQualityOptions] : qualityOptions;
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
     const activeSize = config.size || "auto";
     const transparentBackground = config.background === "transparent";
@@ -63,8 +65,8 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 {showTitle ? <div className="text-lg font-semibold">{t("settingsPanels.image.title")}</div> : null}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.quality")}</SettingTitle>
-                    <div className="grid grid-cols-4 gap-2.5">
-                        {qualityOptions.map((item) => (
+                    <div className={`grid gap-2.5 ${qualityItems.length > 4 ? "grid-cols-3" : "grid-cols-4"}`}>
+                        {qualityItems.map((item) => (
                             <OptionPill key={item.value} selected={quality === item.value} theme={theme} onClick={() => onConfigChange("quality", item.value)}>
                                 {t(`settingsPanels.common.${item.labelKey}`)}
                             </OptionPill>
@@ -161,7 +163,7 @@ export function ImageSettingsTheme({ theme, children }: { theme: CanvasTheme; ch
 }
 
 export function imageQualityLabel(value: string) {
-    return (["auto", "high", "medium", "low"].includes(value) ? i18n.t(`settingsPanels.common.${value}`) : value);
+    return (["auto", "max", "xhigh", "high", "medium", "low"].includes(value) ? i18n.t(`settingsPanels.common.${value}`) : value);
 }
 
 export function imageSizeLabel(size: string) {

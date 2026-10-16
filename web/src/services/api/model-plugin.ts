@@ -236,7 +236,7 @@ export function getPluginTemplates(): Record<ModelCapability, PluginTemplate[]> 
  * @param {string[]} images - reference images as data URLs; empty for text-to-image
  * @param {object} params
  * @param {string} params.size - output size, e.g. "1024x1024" or "auto"
- * @param {string} params.quality - "low" | "medium" | "high"
+ * @param {string} params.quality - "low" | "medium" | "high"; gpt-image-2.5 also "xhigh" | "max"
  * @param {number} params.count - number of images
  * @param {string} [params.background] - "transparent" when requested
  * @param {string} model
