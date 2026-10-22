@@ -95,6 +95,8 @@ export default function ImagePage() {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [isReferenceDragActive, setIsReferenceDragActive] = useState(false);
     const [autoRunToken, setAutoRunToken] = useState(0);
+    const [runningPrompt, setRunningPrompt] = useState("");
+    const [viewingRun, setViewingRun] = useState(true);
     const imageCommand = useWorkbenchAgentStore((state) => state.imageCommand);
     const clearImageCommand = useWorkbenchAgentStore((state) => state.clearImageCommand);
     const updateAgentTask = useWorkbenchAgentStore((state) => state.updateTask);
@@ -102,6 +104,9 @@ export default function ImagePage() {
     const agentTaskIdRef = useRef<string | undefined>(undefined);
 
     const model = effectiveConfig.imageModel || effectiveConfig.model;
+    // 预览历史记录或新建时只切换展示，不覆盖进行中批次的 results，避免生成结果写回时丢失。
+    const visibleResults: GenerationResult[] = previewLog ? previewLog.images.map((image) => ({ id: image.id, status: "success", image })) : viewingRun ? results : [];
+    const runningCard = running ? { title: runningPrompt, elapsedMs, active: viewingRun && !previewLog, onClick: () => (setPreviewLog(null), setViewingRun(true), setLogsOpen(false)) } : undefined;
     const canGenerate = Boolean(prompt.trim());
     const generationCount = Math.max(1, Math.min(10, Number(config.count) || 1));
 
@@ -171,6 +176,8 @@ export default function ImagePage() {
 
         setElapsedMs(0);
         setRunning(true);
+        setRunningPrompt(text);
+        setViewingRun(true);
         if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
         setPreviewLog(null);
         setResults(Array.from({ length: generationCount }, () => ({ id: nanoid(), status: "pending" })));
@@ -268,9 +275,7 @@ export default function ImagePage() {
     const createSession = () => {
         setPrompt("");
         setReferences([]);
-        setResults([]);
-        setElapsedMs(0);
-        setStartedAt(0);
+        setViewingRun(false);
         setSelectedLogIds([]);
         setPreviewLog(null);
     };
@@ -280,7 +285,7 @@ export default function ImagePage() {
         void Promise.all([deleteStoredImages(imageKeys), ...selectedLogIds.map((id) => logStore.removeItem(id))]).then(refreshLogs);
         if (previewLog && selectedLogIds.includes(previewLog.id)) {
             setPreviewLog(null);
-            setResults([]);
+            setViewingRun(false);
         }
         setSelectedLogIds([]);
         setDeleteConfirmOpen(false);
@@ -301,7 +306,6 @@ export default function ImagePage() {
         if (log.config.quality) updateConfig("quality", log.config.quality);
         if (log.config.size) updateConfig("size", log.config.size);
         if (log.config.count) updateConfig("count", log.config.count);
-        setResults(log.images.map((image) => ({ id: image.id, status: "success", image })));
     };
 
     const buildRequestSnapshot = () => {
@@ -340,6 +344,7 @@ export default function ImagePage() {
         const snapshot = buildRequestSnapshot();
         if (!snapshot) return;
         setPreviewLog(null);
+        setViewingRun(true);
         setResults((value) => updateResultAt(value, index, { status: "pending", error: undefined, image: undefined }));
         const retryStartedAt = performance.now();
         try {
@@ -371,6 +376,7 @@ export default function ImagePage() {
                         logs={logs}
                         selectedLogIds={selectedLogIds}
                         activeLogId={previewLog?.id}
+                        runningCard={runningCard}
                         onSelectedLogIdsChange={setSelectedLogIds}
                         onCreateSession={createSession}
                         onDeleteSelected={() => setDeleteConfirmOpen(true)}
@@ -497,11 +503,11 @@ export default function ImagePage() {
                             <div>
                                 <h2 className="text-xl font-semibold">{t("workbench.results")}</h2>
                             </div>
-                            {running ? <Tag className="m-0 px-2 py-1">{t("workbench.waiting", { time: formatDuration(elapsedMs) })}</Tag> : null}
+                            {runningCard?.active ? <Tag className="m-0 px-2 py-1">{t("workbench.waiting", { time: formatDuration(elapsedMs) })}</Tag> : null}
                         </div>
-                        {results.length ? (
+                        {visibleResults.length ? (
                             <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-                                {results.map((result, index) =>
+                                {visibleResults.map((result, index) =>
                                     result.status === "success" && result.image ? (
                                         <ResultImageCard key={result.id} image={result.image} index={index} onEdit={addResultToReferences} onDownload={downloadImage} onSaveAsset={saveResultToAssets} />
                                     ) : result.status === "failed" ? (
@@ -536,6 +542,7 @@ export default function ImagePage() {
                     logs={logs}
                     selectedLogIds={selectedLogIds}
                     activeLogId={previewLog?.id}
+                    runningCard={runningCard}
                     onSelectedLogIdsChange={setSelectedLogIds}
                     onCreateSession={createSession}
                     onDeleteSelected={() => setDeleteConfirmOpen(true)}
@@ -667,6 +674,7 @@ function LogPanel({
     logs,
     selectedLogIds,
     activeLogId,
+    runningCard,
     onSelectedLogIdsChange,
     onCreateSession,
     onDeleteSelected,
@@ -675,6 +683,7 @@ function LogPanel({
     logs: GenerationLog[];
     selectedLogIds: string[];
     activeLogId?: string;
+    runningCard?: { title: string; elapsedMs: number; active: boolean; onClick: () => void };
     onSelectedLogIdsChange: (ids: string[]) => void;
     onCreateSession: () => void;
     onDeleteSelected: () => void;
@@ -704,6 +713,15 @@ function LogPanel({
                 </Button>
             </div>
             <div className="space-y-3">
+                {runningCard ? (
+                    <button type="button" className={`${logCardClass(runningCard.active)} flex items-center gap-2`} onClick={runningCard.onClick}>
+                        <LoaderCircle className="size-4 shrink-0 animate-spin text-stone-500" />
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold leading-5">{runningCard.title}</span>
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="processing">
+                            {t("workbench.waiting", { time: formatDuration(runningCard.elapsedMs) })}
+                        </Tag>
+                    </button>
+                ) : null}
                 {logs.map((log) => (
                     <LogCard
                         key={log.id}
@@ -714,7 +732,7 @@ function LogPanel({
                         onClick={() => onPreviewLog(log)}
                     />
                 ))}
-                {!logs.length ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-stone-300 text-center text-sm text-stone-500 dark:border-stone-700">{t("workbench.noLogs")}</div> : null}
+                {!logs.length && !runningCard ? <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-stone-300 text-center text-sm text-stone-500 dark:border-stone-700">{t("workbench.noLogs")}</div> : null}
             </div>
         </>
     );
@@ -728,7 +746,7 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
     return (
         <button
             type="button"
-            className={`block w-full rounded-lg border p-2 text-left transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`}
+            className={logCardClass(active)}
             onClick={onClick}
         >
             <div className="grid grid-cols-[minmax(128px,1fr)_auto] gap-2">
@@ -769,6 +787,10 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
             </div>
         </button>
     );
+}
+
+function logCardClass(active: boolean) {
+    return `block w-full rounded-lg border p-2 text-left transition ${active ? "border-stone-900 bg-blue-50 dark:border-stone-100 dark:bg-blue-950/20" : "border-stone-200 bg-background hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"}`;
 }
 
 async function readStoredLogs() {
