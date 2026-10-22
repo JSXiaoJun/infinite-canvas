@@ -6,6 +6,7 @@ import AssetsPage from "@/pages/assets";
 import CanvasPage from "@/pages/canvas";
 import CanvasProjectPage from "@/pages/canvas/project";
 import ConfigPage from "@/pages/config";
+import DepthVideoPage from "@/pages/depth-video";
 import DirectorPage from "@/pages/director";
 import DirectorProjectPage from "@/pages/director/project";
 import HomePage from "@/pages/home";
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
             { path: "/", element: <HomePage /> },
             { path: "/image", element: <ImagePage /> },
             { path: "/video", element: <VideoPage /> },
+            { path: "/depth-video", element: <DepthVideoPage /> },
             { path: "/director", element: <DirectorPage /> },
             { path: "/director/:id", element: <DirectorProjectPage /> },
             { path: "/assets", element: <AssetsPage /> },

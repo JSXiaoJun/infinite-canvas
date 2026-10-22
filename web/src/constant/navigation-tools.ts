@@ -1,4 +1,4 @@
-import { Clapperboard, FileText, ImagePlus, Images, Maximize2, Settings2, Video } from "lucide-react";
+import { Clapperboard, FileText, ImagePlus, Images, Layers, Maximize2, Settings2, Video } from "lucide-react";
 
 export const navigationTools = [
     {
@@ -12,6 +12,10 @@ export const navigationTools = [
     {
         slug: "video",
         icon: Video,
+    },
+    {
+        slug: "depth-video",
+        icon: Layers,
     },
     {
         slug: "director",

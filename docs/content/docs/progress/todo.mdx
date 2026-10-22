@@ -8,3 +8,4 @@ description: Planned follow-up work
 - Replace the Claude Code CLI adapter with a Claude Agent SDK adapter and improve the tool queue, following the [Local Agent Integration Plan](/docs/progress/local-agent-integration-plan).
 - Add Skill installation from web search, Skill resource-file management, and controlled local-memory persistence.
 - Director Stage: the default actor model currently loads the three.js example Xbot.glb from the jsDelivr CDN and should be bundled for offline or internal Docker deployments; director scenes are not yet included in WebDAV sync or export.
+- Depth Video: the depth model is downloaded from HuggingFace and the MediaPipe pose/face models from Google Storage, which may be unreachable in some networks; consider self-hosting or a configurable mirror. Depth is normalized per frame, so brightness can flicker between frames; consider temporal smoothing.
