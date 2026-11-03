@@ -1,8 +1,10 @@
 import axios from "axios";
 
 import i18n from "@/i18n";
+import { requiresReferenceUrls } from "@/constant/image-model-rules";
 import { apiFormatLabel, buildApiUrl, capabilitySupport, resolveModelRequestConfig, resolveModelScript, withLocalProxy, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 import { normalizePluginImages, runModelPlugin } from "./model-plugin";
+import { uploadR2Asset } from "./r2-assets";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
@@ -884,6 +886,42 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     const quality = requestQuality(normalizeQuality(config.quality), requestConfig.model);
     const requestSize = resolveRequestSize(quality, config.size);
     const background = normalizeBackground(config.background);
+
+    // 这类模型的编辑接口只收在线图片 URL，先把参考图传到 R2，再用 JSON 提交。
+    if (requiresReferenceUrls(requestConfig.model)) {
+        try {
+            const uploaded = await Promise.all(
+                references.map(async (image) => {
+                    const file = dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) });
+                    return uploadR2Asset(file, options?.signal);
+                }),
+            );
+            const response = await axios.post<ImageApiResponse>(
+                aiApiUrl(requestConfig, "/images/edits"),
+                {
+                    model: requestConfig.model,
+                    prompt: withSystemPrompt(requestConfig, requestPrompt),
+                    n,
+                    image: uploaded.length > 1 ? uploaded : uploaded[0],
+                    ...(quality ? { quality } : {}),
+                    ...(requestSize ? { size: requestSize } : {}),
+                    ...(background ? { background } : {}),
+                    // gpt-image models reject response_format; they always return b64.
+                    ...(/gpt-image/.test(requestConfig.model) ? {} : { response_format: "b64_json" }),
+                    output_format: IMAGE_OUTPUT_FORMAT,
+                },
+                {
+                    headers: aiHeaders(requestConfig, "application/json"),
+                    signal: options?.signal,
+                    timeout: IMAGE_REQUEST_TIMEOUT_MS,
+                },
+            );
+            return await parseImagePayload(response.data);
+        } catch (error) {
+            throw new Error(withImageFormatHint(requestConfig, readAxiosError(error, apiText("requestFailed"))));
+        }
+    }
+
     const formData = new FormData();
     formData.set("model", requestConfig.model);
     formData.set("prompt", withSystemPrompt(requestConfig, requestPrompt));
