@@ -19,6 +19,7 @@ const DIMENSION_STEP = 16;
 export const imageQualityOptions = qualityOptions.map((item) => ({ value: item.value, get label() { return i18n.t(`settingsPanels.common.${item.labelKey}`); } }));
 export const imageAspectOptions = mediaRatioOptions.map((item) => ({ value: item.value, label: item.value === "auto" ? i18n.t("settingsPanels.common.auto") : item.value }));
 export const imageScaleOptions = mediaScaleOptions.map((value) => ({ value, label: value === "auto" ? i18n.t("settingsPanels.common.auto") : value }));
+export const imageResolutionOptions = mediaScaleOptions.filter((value) => value !== "auto").map((value) => ({ value, label: value }));
 
 type ImageSettingsPanelProps = {
     config: AiConfig;

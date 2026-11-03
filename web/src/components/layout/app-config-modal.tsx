@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@/components/model-picker";
-import { imageAspectOptions } from "@/components/image-settings-panel";
+import { imageAspectOptions, imageResolutionOptions } from "@/components/image-settings-panel";
 import { videoResolutionOptions, videoSizeOptions } from "@/components/video-settings-panel";
 import { ChannelEditorDrawer } from "@/components/layout/channel-editor-drawer";
 import { ConfigLocalProxy } from "@/components/layout/config-local-proxy";
@@ -17,7 +17,7 @@ import { fetchYyapiVideoCapabilities, isYyapiBaseUrl } from "@/services/api/vide
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@/services/app-sync";
 import { testWebdavConnection, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
-import { computeVideoSize, inferVideoRatio } from "@/lib/media-size";
+import { computeMediaSize, computeVideoSize, inferMediaRatio, inferMediaScale, inferVideoRatio } from "@/lib/media-size";
 import { apiFormatLabel, createModelChannel, defaultReversePrompt, modelOptionsFromChannels, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore, type AiConfig, type ApiCallFormat, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
 
 type ModelGroup = {
@@ -74,6 +74,9 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const hasYyapiVideoModels = config.channels.some((channel) => isYyapiBaseUrl(channel.baseUrl) && channel.models.some((model) => model.capability === "video"));
     const yyapiCapabilitiesCachedAt = formatYyapiCapabilitiesCachedAt(config.yyapiVideoCapabilitiesUpdatedAt);
     const locale = i18n.resolvedLanguage as AppLocale;
+    const imageRatio = inferMediaRatio(config.size, "1:1");
+    const imageScale = inferMediaScale(config.size);
+    const imageResolution = imageScale === "auto" ? "1k" : imageScale;
     useEffect(() => setActiveTab(initialTab), [initialTab]);
 
     const saveConfig = (nextConfig: AiConfig) => {
@@ -274,7 +277,10 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                         />
                                     </Form.Item>
                                     <Form.Item label={t("config.preferences.defaultImageSize")} className="mb-4">
-                                        <Select value={config.size} options={imageAspectOptions} onChange={(value) => updateConfig("size", value)} />
+                                        <Select value={imageRatio} options={imageAspectOptions} onChange={(value) => updateConfig("size", imageScale === "auto" ? value : computeMediaSize(imageScale, value))} />
+                                    </Form.Item>
+                                    <Form.Item label={t("config.preferences.defaultImageResolution")} className="mb-4">
+                                        <Select value={imageResolution} options={imageResolutionOptions} onSelect={(value) => updateConfig("size", computeMediaSize(value, imageRatio === "auto" ? "1:1" : imageRatio))} />
                                     </Form.Item>
                                     <Form.Item label={t("config.preferences.defaultVideoSize")} className="mb-4">
                                         <Select value={inferVideoRatio(config.videoSize)} options={videoSizeOptions} onChange={(value) => updateConfig("videoSize", computeVideoSize(config.vquality, value))} />
