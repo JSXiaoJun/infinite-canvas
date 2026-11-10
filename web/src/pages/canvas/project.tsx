@@ -49,7 +49,7 @@ import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useAgentBridge } from "@/pages/canvas/hooks/use-agent-bridge";
 import { usePluginHost } from "@/pages/canvas/hooks/use-plugin-host";
 import { buildNodeMentionReferences, getGroupResourceNodes, isCanvasReferenceNode, type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
-import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
+import { downloadCanvasNodes, exportCanvasProjects, hasDownloadableNodeMedia } from "@/lib/canvas/canvas-export";
 import { applyNodeConfigPatch, audioMetadata, buildAudioGenerationMetadata, buildImageGenerationMetadata, createCanvasNode, imageMetadata, videoMetadata } from "@/lib/canvas/canvas-node-factory";
 import { applyGroupSelection, applyUngroupSelection, canGroupSelectedNodes, canUngroupSelectedNodes, collectGroupMemberNodes, findContainingGroupId, findGroupDropTarget, getConnectionTargetAnchor, getGroupWrapRect, normalizeConnection, snapNodesIntoGroup } from "@/lib/canvas/canvas-node-geometry";
 import {
@@ -752,6 +752,7 @@ function InfiniteCanvasPage() {
     const selectedNodes = useMemo(() => nodes.filter((node) => selectedNodeIds.has(node.id)), [nodes, selectedNodeIds]);
     const canGroupSelection = canGroupSelectedNodes(selectedNodeIds, nodes);
     const canUngroupSelection = canUngroupSelectedNodes(selectedNodeIds, nodes);
+    const canDownloadSelection = selectedNodes.some(hasDownloadableNodeMedia);
     const activeNodeId = hasMultipleSelectedNodes ? null : hoveredNodeId || (selectedNodeIds.size === 1 ? Array.from(selectedNodeIds)[0] : null);
     const groupChildCountById = useMemo(() => {
         const map = new Map<string, number>();
@@ -1844,6 +1845,20 @@ function InfiniteCanvasPage() {
         if (!image?.content) return;
         saveAs(image.content, `canvas-image-${node.id}-${image.id}.${imageExtension(image.content)}`);
     }, []);
+
+    const downloadSelectedNodes = useCallback(async () => {
+        const targets = nodesRef.current.filter((node) => selectedNodeIdsRef.current.has(node.id));
+        const hide = message.loading(t("canvas.selection.downloading"), 0);
+        try {
+            const count = await downloadCanvasNodes(targets, t("canvas.selection.downloadName", { count: targets.length }));
+            message.success(t("canvas.selection.downloaded", { count }));
+        } catch (error) {
+            console.error(error);
+            message.error(t("canvas.selection.downloadFailed"));
+        } finally {
+            hide();
+        }
+    }, [message, t]);
 
     const captureVideoNodeFrame = useCallback(
         async (nodeId: string, position: VideoFramePosition) => {
@@ -3412,8 +3427,10 @@ function InfiniteCanvasPage() {
                         nodes={selectedNodes}
                         viewport={viewport}
                         showToolbar={!isNodeDragging && !isNodeResizing}
+                        canDownload={canDownloadSelection}
                         canGroup={canGroupSelection}
                         canUngroup={canUngroupSelection}
+                        onDownload={downloadSelectedNodes}
                         onGroup={groupSelection}
                         onUngroup={ungroupSelection}
                     />
